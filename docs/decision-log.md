@@ -166,3 +166,37 @@ All errors are `application/problem+json` (RFC 9457) with a stable machine-reada
 `request_id`, and optional `errors[]` field-level details. Status mapping: 400 malformed,
 401 unauthenticated, 403 forbidden, 404, 409 version conflict / duplicate, 422 domain validation,
 429 rate-limited (with `Retry-After`), 503 dependency unavailable / provider unavailable.
+
+## ADR-015 — OpenAPI generated from Go types (accepted)
+
+The contract is produced by `internal/apispec` from the actual request/response types (reflection)
+and an operation table (access level, permissions, statuses, query parameters), written by
+`go run ./cmd/openapi-gen`. Tests fail when the committed file differs from the generator, when a
+mounted route is undocumented or a documented one is not mounted, and when a documented permission
+is not the one the middleware enforces (403 problems carry `details.required_permission`).
+Hand-written specs drift; generated ones stay honest.
+
+## ADR-016 — Fixture time anchor (accepted)
+
+Synthetic fixtures have fixed dates, but feed, catch-up, digest and breaking logic use windows
+relative to now. `FIXTURE_TIME_ANCHOR` (dev/test only, refused in production) shifts fixture item
+dates by `now − anchor`, keeping relative ages constant so tests do not depend on the calendar day.
+
+## ADR-017 — Breaking alerts are policy-gated and corroboration-based (accepted)
+
+Breaking pushes require the `breaking_notifications` flag and an event that is fresh, sufficiently
+sourced and confident, with all checkable claims assessed, at least one corroborated, and nothing
+disputed or awaiting review. Eligibility is re-evaluated on verdict updates and an alert is sent at
+most once per event. Unresolved rumours are therefore never pushed as confirmed news.
+
+## ADR-018 — Evaluation harness with regression gates (accepted)
+
+`newsctl eval` measures classification, claim extraction and grounded answering for the currently
+routed models on versioned datasets, persists per-case results, and fails on gate regressions. The
+numbers are measurements on small synthetic sets, not accuracy claims.
+
+## ADR-019 — Unsupported source modes are rejected (accepted)
+
+`official_api` endpoints, headless rendering and JavaScript-required sources are rejected at
+validation with an explanation instead of being accepted and failing or being silently ignored.
+HTML list pages are supported through link selectors.
