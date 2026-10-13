@@ -49,7 +49,7 @@ type Fetcher struct {
 	// Development/test only; it never applies to live endpoints.
 	FixtureAnchor *time.Time
 	client        *http.Client
-	robots      robotsCache
+	robots        robotsCache
 }
 
 func NewFetcher(policy ssrf.Policy, ua, fixtureDir string, limiter ratelimit.Limiter, live bool) *Fetcher {

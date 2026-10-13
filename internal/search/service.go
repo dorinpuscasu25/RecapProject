@@ -252,12 +252,24 @@ func (s *Service) Cutover(ctx context.Context, docType string) error {
 	if building == nil {
 		return apperr.Conflict("no_building_collection", "There is no collection being built for this document type.")
 	}
-	if active != nil {
-		a, _ := s.vec.Count(ctx, active.Name)
-		b, _ := s.vec.Count(ctx, building.Name)
-		if a > 0 && float64(b) < 0.98*float64(a) {
-			return apperr.Conflict("backfill_incomplete", fmt.Sprintf("Building collection has %d of %d vectors; wait for backfill.", b, a))
-		}
+	// Readiness is judged against the canonical records, not the old collection (which may hold
+	// vectors for records that are no longer eligible): the latest backfill for this collection
+	// must have succeeded and every backfilled vector must be present.
+	var jobStatus string
+	err = s.db.Pool.QueryRow(ctx, `SELECT status FROM jobs WHERE kind=$1 AND payload->>'collection'=$2 ORDER BY created_at DESC LIMIT 1`,
+		JobVectorBackfill, building.Name).Scan(&jobStatus)
+	if err != nil && !db.IsNoRows(err) {
+		return err
+	}
+	if jobStatus != "succeeded" {
+		return apperr.Conflict("backfill_incomplete", fmt.Sprintf("The backfill for %s has not completed (status %q).", building.Name, jobStatus))
+	}
+	b, err := s.vec.Count(ctx, building.Name)
+	if err != nil {
+		return apperr.Unavailable("vector_store_unavailable", "Cannot verify the building collection: "+err.Error())
+	}
+	if b < building.BackfilledCount {
+		return apperr.Conflict("backfill_incomplete", fmt.Sprintf("Building collection has %d of %d backfilled vectors.", b, building.BackfilledCount))
 	}
 	err = s.db.Tx(ctx, func(tx pgx.Tx) error {
 		if active != nil {

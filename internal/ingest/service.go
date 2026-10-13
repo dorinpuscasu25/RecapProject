@@ -380,7 +380,7 @@ func refreshHealth(ctx context.Context, tx pgx.Tx, id uuid.UUID, lastStatus int)
 		SELECT $1, NULLIF($2,0),
 		  count(*) FILTER (WHERE r.started_at > now() - interval '24 hours'),
 		  count(*) FILTER (WHERE r.started_at > now() - interval '24 hours' AND r.status='failed'),
-		  CASE WHEN sum(r.fetched_count) > 0 THEN sum(r.accepted_count + r.duplicate_count)::real / sum(r.fetched_count) END,
+		  CASE WHEN sum(r.fetched_count + r.error_count) > 0 THEN sum(r.accepted_count + r.duplicate_count)::real / sum(r.fetched_count + r.error_count) END,
 		  CASE WHEN sum(r.discovered_count + r.duplicate_count) > 0 THEN sum(r.duplicate_count)::real / sum(r.discovered_count + r.duplicate_count) END,
 		  (SELECT extract(epoch FROM now() - max(published_at))::bigint FROM articles WHERE source_endpoint_id=$1),
 		  CASE WHEN count(*) FILTER (WHERE r.started_at > now() - interval '24 hours' AND r.status='failed') >= 3
@@ -470,8 +470,23 @@ func bumpRun(ctx context.Context, tx pgx.Tx, runID uuid.UUID, col string) error 
 
 func appendRunError(ctx context.Context, tx pgx.Tx, runID uuid.UUID, url, msg string) error {
 	b, _ := json.Marshal([]map[string]string{{"url": url, "message": truncate(msg, 300)}})
-	_, err := tx.Exec(ctx, `UPDATE source_crawl_runs SET errors = CASE WHEN jsonb_array_length(errors) < 50 THEN errors || $2::jsonb ELSE errors END,
-		error_count = error_count + 1 WHERE id=$1`, runID, b)
+	// A feed that parses but whose items fail is not a clean success: the run becomes partial and,
+	// once half or more of the discovered items fail, the endpoint is reported degraded.
+	var endpoint *uuid.UUID
+	var errorsN, discovered int
+	err := tx.QueryRow(ctx, `UPDATE source_crawl_runs SET errors = CASE WHEN jsonb_array_length(errors) < 50 THEN errors || $2::jsonb ELSE errors END,
+		error_count = error_count + 1, status = CASE WHEN status='succeeded' THEN 'partial' ELSE status END
+		WHERE id=$1 RETURNING source_endpoint_id, error_count, discovered_count`, runID, b).Scan(&endpoint, &errorsN, &discovered)
+	if db.IsNoRows(err) {
+		return nil
+	}
+	if err != nil || endpoint == nil {
+		return err
+	}
+	if discovered > 0 && errorsN*2 >= discovered {
+		_, err = tx.Exec(ctx, `UPDATE source_endpoints SET health_state='degraded', last_error=$2 WHERE id=$1 AND health_state IN ('healthy','unknown')`,
+			*endpoint, "item processing failures: "+truncate(msg, 200))
+	}
 	return err
 }
 
