@@ -937,3 +937,68 @@ func nonNil(s []string) []string {
 	}
 	return s
 }
+
+// TopEvents ranks events for a user in a window with optional category/region restriction
+// (used by briefings and digests). Category filters include descendants.
+func (s *Service) TopEvents(ctx context.Context, user uuid.UUID, since, until time.Time, categories []uuid.UUID, region string, minImportance float64, limit int) ([]uuid.UUID, error) {
+	p, err := s.profile(ctx, user)
+	if err != nil {
+		return nil, err
+	}
+	rp := s.rankPolicy(ctx)
+	cands, err := s.candidates(ctx, user, since, until, true)
+	if err != nil {
+		return nil, err
+	}
+	filter := map[string]float64{}
+	for _, c := range categories {
+		filter[c.String()] = 1
+	}
+	filter = s.categoryClosure(ctx, filter)
+	cats := s.categoryClosure(ctx, p.cats)
+	regionKey := ""
+	if region != "" {
+		regionKey = nlp.EntityKey(region)
+	}
+	var kept []*candidate
+	for _, c := range cands {
+		if c.Importance < minImportance {
+			continue
+		}
+		if len(filter) > 0 {
+			ok := false
+			for _, cat := range c.Categories {
+				if _, hit := filter[cat]; hit {
+					ok = true
+				}
+			}
+			if !ok {
+				continue
+			}
+		}
+		if regionKey != "" {
+			ok := false
+			for _, l := range c.Locations {
+				if l == regionKey {
+					ok = true
+				}
+			}
+			if !ok {
+				continue
+			}
+		}
+		if s.score(c, p, cats, rp, until, len(filter) == 0 && regionKey == "") {
+			kept = append(kept, c)
+		}
+	}
+	sort.SliceStable(kept, func(i, j int) bool { return kept[i].Score > kept[j].Score })
+	kept = diversify(kept, rp.MaxPerCategoryRatio, max(limit, 1))
+	var out []uuid.UUID
+	for i, c := range kept {
+		if i >= limit {
+			break
+		}
+		out = append(out, c.ID)
+	}
+	return out, nil
+}

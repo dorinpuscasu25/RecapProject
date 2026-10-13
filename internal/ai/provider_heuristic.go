@@ -406,6 +406,12 @@ var uncertaintyText = map[string]string{
 	"en": "This answer relies only on the cited sources; information may have changed since the most recent source.",
 }
 
+var indirectText = map[string]string{
+	"ro": "Sursele nu abordează direct întrebarea; mai sus este ce spun despre subiect, fără concluzii suplimentare.",
+	"ru": "Источники не отвечают на вопрос напрямую; выше — то, что в них сказано по теме, без дополнительных выводов.",
+	"en": "The sources do not address the question directly; above is what they say about the topic, without further conclusions.",
+}
+
 var abstainText = map[string]string{
 	"ro": "Nu am găsit suficiente informații verificabile în sursele disponibile pentru a răspunde la această întrebare.",
 	"ru": "В доступных источниках недостаточно проверяемой информации, чтобы ответить на этот вопрос.",
@@ -475,6 +481,40 @@ func heurAnswer(in *AnswerInput) (*AnswerOutput, error) {
 		if !seen[c.ref] {
 			seen[c.ref] = true
 			cites = append(cites, c.ref)
+		}
+	}
+	// Coverage guard: sentences that share a couple of generic words ("score", "match") with a
+	// question about something else are not an answer. Most of the question's own key terms must
+	// appear in the selected evidence.
+	if len(parts) > 0 {
+		own := map[string]bool{}
+		for _, t := range nlp.KeyTokens(in.Question) {
+			if len(t) >= 3 {
+				own[t] = true
+			}
+		}
+		if len(own) >= 3 {
+			got := map[string]bool{}
+			for _, p := range parts {
+				for _, t := range nlp.KeyTokens(p) {
+					if own[t] {
+						got[t] = true
+					}
+				}
+			}
+			if float64(len(got))/float64(len(own)) < 0.6 {
+				parts, cites = nil, nil
+			}
+		}
+	}
+	if len(parts) == 0 && in.ScopeDefault && len(in.Context) > 0 {
+		d := in.Context[0]
+		ss := nlp.Sentences(d.Text)
+		for i := 0; i < len(ss) && i < 2; i++ {
+			parts = append(parts, nlp.NormalizeText(ss[i].Text)+" ["+d.Ref+"]")
+		}
+		if len(parts) > 0 {
+			return &AnswerOutput{Answer: strings.Join(parts, " "), Citations: []string{d.Ref}, Uncertainty: indirectText[lang] + " " + uncertaintyText[lang]}, nil
 		}
 	}
 	if len(parts) == 0 {

@@ -6,11 +6,14 @@ import (
 
 	"github.com/dorinpuscasu25/recapproject/internal/ai"
 	"github.com/dorinpuscasu25/recapproject/internal/api"
+	"github.com/dorinpuscasu25/recapproject/internal/briefings"
+	"github.com/dorinpuscasu25/recapproject/internal/chat"
 	"github.com/dorinpuscasu25/recapproject/internal/enrich"
 	"github.com/dorinpuscasu25/recapproject/internal/events"
 	"github.com/dorinpuscasu25/recapproject/internal/factcheck"
 	"github.com/dorinpuscasu25/recapproject/internal/feed"
 	"github.com/dorinpuscasu25/recapproject/internal/jobs"
+	"github.com/dorinpuscasu25/recapproject/internal/notifications"
 	"github.com/dorinpuscasu25/recapproject/internal/platform/bus"
 	"github.com/dorinpuscasu25/recapproject/internal/policy"
 	"github.com/dorinpuscasu25/recapproject/internal/search"
@@ -28,7 +31,11 @@ type modules struct {
 	Events    *events.Service
 	FactCheck *factcheck.Service
 	Feed      *feed.Service
-	ext       []extension
+
+	Briefings     *briefings.Service
+	Chat          *chat.Service
+	Notifications *notifications.Service
+	ext           []extension
 }
 
 // extension lets later modules register consumers, jobs and periodic work.

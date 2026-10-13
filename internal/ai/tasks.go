@@ -358,6 +358,9 @@ type AnswerInput struct {
 	Now      string       `json:"now"`
 	History  []Message    `json:"history,omitempty"`
 	Context  []ContextDoc `json:"context"`
+	// ScopeDefault: the user scoped the conversation to a specific item; when the sources do not
+	// address the question directly, summarise what they do say and state that limitation.
+	ScopeDefault bool `json:"scope_default,omitempty"`
 }
 
 type AnswerOutput struct {

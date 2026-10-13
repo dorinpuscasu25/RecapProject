@@ -270,7 +270,7 @@ func (a *Admin) UpsertModel(ctx context.Context, id *uuid.UUID, in ModelInput) (
 			id = &nid
 			_, err := tx.Exec(ctx, `INSERT INTO ai_models (id, provider_id, slug, model_name, model_version, kind, supports_structured, supports_json_mode, languages,
 				context_window, max_output_tokens, embedding_dims, input_price_per_mtok, output_price_per_mtok, price_per_mchar, enabled, metadata)
-				VALUES ($1,$2,$3,$4,COALESCE($5,''),$6,COALESCE($7,false),COALESCE($8,false),COALESCE($9,'{ro,ru,en}'),COALESCE($10,8192),COALESCE($11,2048),$12,
+				VALUES ($1,$2,$3,$4,COALESCE($5,''),$6,COALESCE($7,false),COALESCE($8,false),COALESCE($9::text[],'{ro,ru,en}'::text[]),COALESCE($10,8192),COALESCE($11,2048),$12,
 				COALESCE($13,0),COALESCE($14,0),COALESCE($15,0),COALESCE($16,true),COALESCE($17,'{}'::jsonb))`,
 				nid, *in.ProviderID, *in.Slug, *in.ModelName, in.ModelVersion, *in.Kind, in.SupportsStructured, in.SupportsJSONMode, in.Languages, in.ContextWindow,
 				in.MaxOutputTokens, in.EmbeddingDims, in.InputPricePerMTok, in.OutputPricePerMTok, in.PricePerMChar, in.Enabled, nullMeta(in.Metadata, meta))
@@ -288,7 +288,7 @@ func (a *Admin) UpsertModel(ctx context.Context, id *uuid.UUID, in ModelInput) (
 				return apperr.ValidationMsg("embedding_dims_immutable", "Embedding dimensions are immutable; create a new model and migrate collections.")
 			}
 			tag, err := tx.Exec(ctx, `UPDATE ai_models SET model_name=COALESCE($2,model_name), model_version=COALESCE($3,model_version),
-				supports_structured=COALESCE($4,supports_structured), supports_json_mode=COALESCE($5,supports_json_mode), languages=COALESCE($6,languages),
+				supports_structured=COALESCE($4,supports_structured), supports_json_mode=COALESCE($5,supports_json_mode), languages=COALESCE($6::text[],languages),
 				context_window=COALESCE($7,context_window), max_output_tokens=COALESCE($8,max_output_tokens), input_price_per_mtok=COALESCE($9,input_price_per_mtok),
 				output_price_per_mtok=COALESCE($10,output_price_per_mtok), price_per_mchar=COALESCE($11,price_per_mchar), enabled=COALESCE($12,enabled),
 				metadata=COALESCE($13,metadata), version=version+1, updated_at=now() WHERE id=$1 AND ($14::int IS NULL OR version=$14)`,
