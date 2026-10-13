@@ -451,6 +451,7 @@ func (g *Gateway) run(ctx context.Context, task Task, input any, schema map[stri
 		if attempts <= 0 {
 			attempts = 1
 		}
+		msgs := []Message{{Role: "user", Content: prompt}}
 		for a := 1; a <= attempts; a++ {
 			release, err := g.acquire(ctx, m)
 			if err != nil {
@@ -467,7 +468,7 @@ func (g *Gateway) run(ctx context.Context, task Task, input any, schema map[stri
 			if m.MaxOutputTokens > 0 && maxTok > m.MaxOutputTokens {
 				maxTok = m.MaxOutputTokens
 			}
-			resp, err := prov.Generate(cctx, ProviderRequest{Model: m, Task: task, System: system, Messages: []Message{{Role: "user", Content: prompt}},
+			resp, err := prov.Generate(cctx, ProviderRequest{Model: m, Task: task, System: system, Messages: msgs,
 				Schema: schema, SchemaName: string(task), Temperature: route.Temperature, MaxTokens: maxTok, Payload: input})
 			cancel()
 			release()
@@ -477,6 +478,10 @@ func (g *Gateway) run(ctx context.Context, task Task, input any, schema map[stri
 					err = &ProviderError{Category: ErrInvalid, Msg: verr.Error()}
 					g.record(ctx, route, m, mode, task, "invalid_output", a, resp.Usage, lat, string(ErrInvalid), verr.Error(), o, nil, i > 0, hex.EncodeToString(reqHash[:8]))
 					lastErr = err
+					// Repair attempt: show the model its output and the validation error.
+					msgs = []Message{{Role: "user", Content: prompt}, {Role: "assistant", Content: resp.Text},
+						{Role: "user", Content: "That output was rejected by validation: " + verr.Error() +
+							"\nReturn a corrected JSON object only, following the schema and the rules above."}}
 					continue
 				}
 				id := g.record(ctx, route, m, mode, task, "succeeded", a, resp.Usage, lat, "", "", o, json.RawMessage(resp.Text), i > 0, hex.EncodeToString(reqHash[:8]))

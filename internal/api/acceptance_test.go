@@ -402,3 +402,54 @@ func TestSSRFAndAdminRBAC(t *testing.T) {
 		t.Fatalf("errors must be problem+json: %v %s", r.Header, r.Raw)
 	}
 }
+
+// repairing returns an invalid category first and corrects itself when shown the validation error.
+type repairing struct {
+	mu   sync.Mutex
+	seen []string
+}
+
+func (p *repairing) Generate(ctx context.Context, r ai.ProviderRequest) (*ai.ProviderResponse, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	last := r.Messages[len(r.Messages)-1].Content
+	p.seen = append(p.seen, last)
+	if !strings.Contains(last, "rejected by validation") {
+		return &ai.ProviderResponse{Text: `{"assignments":[{"category_slug":"invented-category","confidence":0.9,"is_primary":true,"rationale":"x"}]}`}, nil
+	}
+	return ai.Heuristic{}.Generate(ctx, r)
+}
+
+// Invalid structured output is never accepted: the model is shown the validation error and retried.
+func TestInvalidOutputRepairRetry(t *testing.T) {
+	e := testutil.NewEnv(t)
+	admin := e.Admin("repair-admin@example.com", "admin")
+	fake := &repairing{}
+	e.App.AIGateway().OverrideProvider("repairing", fake)
+	p := e.MustStatus(e.Do("POST", "/v1/admin/ai/providers", admin, map[string]any{"slug": "repairing", "kind": "openai_compatible",
+		"display_name": "Repairing", "base_url": "http://127.0.0.1:9/v1", "enabled": true}), 201)
+	m := e.MustStatus(e.Do("POST", "/v1/admin/ai/models", admin, map[string]any{"provider_id": p.Str("id"), "slug": "repairing-chat",
+		"model_name": "r1", "kind": "chat", "supports_structured": true, "enabled": true}), 201)
+	cls := routeID(t, e, admin, "category_classification")
+	e.MustStatus(e.Do("PATCH", "/v1/admin/ai/routes/"+cls["id"].(string), admin, map[string]any{"primary_model_id": m.Str("id"),
+		"fallback_model_ids": []string{}, "max_attempts": 2, "version": cls["version"]}), 200)
+	_, ep := e.SetupSource(admin, testutil.FixtureSource{Name: "Știri Diverse Exemplu", Domain: "diverse-exemplu.md", Feed: "diverse-ro.xml", Languages: []string{"ro"}})
+	e.Crawl(admin, ep)
+	var invalid, repaired bool
+	for _, x := range executions(t, e, admin, "category_classification") {
+		if x["status"] == "invalid_output" && x["attempt"].(float64) == 1 {
+			invalid = true
+		}
+		if x["status"] == "succeeded" && x["attempt"].(float64) == 2 && x["model_slug"] == "repairing-chat" {
+			repaired = true
+		}
+	}
+	if !invalid || !repaired {
+		t.Fatalf("expected invalid first attempt and repaired second: invalid=%v repaired=%v", invalid, repaired)
+	}
+	var n int
+	_ = e.App.DB.Pool.QueryRow(e.Ctx, `SELECT count(*) FROM article_categories ac JOIN categories c ON c.id=ac.category_id WHERE c.slug='invented-category'`).Scan(&n)
+	if n != 0 {
+		t.Fatal("an invalid category must never be stored")
+	}
+}
