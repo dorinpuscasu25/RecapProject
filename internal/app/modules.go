@@ -8,6 +8,7 @@ import (
 	"github.com/dorinpuscasu25/recapproject/internal/api"
 	"github.com/dorinpuscasu25/recapproject/internal/enrich"
 	"github.com/dorinpuscasu25/recapproject/internal/events"
+	"github.com/dorinpuscasu25/recapproject/internal/factcheck"
 	"github.com/dorinpuscasu25/recapproject/internal/jobs"
 	"github.com/dorinpuscasu25/recapproject/internal/platform/bus"
 	"github.com/dorinpuscasu25/recapproject/internal/policy"
@@ -18,13 +19,14 @@ import (
 // modules groups the intelligence/experience modules (AI, enrichment, events, fact-checking,
 // search, personalization, briefings, chat, notifications).
 type modules struct {
-	app    *App
-	Policy *policy.Store
-	AI     *ai.Gateway
-	Search *search.Service
-	Enrich *enrich.Service
-	Events *events.Service
-	ext    []extension
+	app       *App
+	Policy    *policy.Store
+	AI        *ai.Gateway
+	Search    *search.Service
+	Enrich    *enrich.Service
+	Events    *events.Service
+	FactCheck *factcheck.Service
+	ext       []extension
 }
 
 // extension lets later modules register consumers, jobs and periodic work.

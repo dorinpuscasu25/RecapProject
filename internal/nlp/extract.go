@@ -312,7 +312,8 @@ var (
 	attribRE  = regexp.MustCompile(`(?i)(?:potrivit|conform|a declarat|a anunțat|a afirmat|a precizat|a spus|susține|по словам|по данным|заявил[аи]?|сообщил[аи]?|отметил[аи]?|согласно)\s+([\p{Lu}][\p{L}\-]+(?:\s[\p{Lu}][\p{L}\-]+){0,3})`)
 	attribRE2 = regexp.MustCompile(`([\p{Lu}][\p{L}\-]+(?:\s[\p{Lu}][\p{L}\-]+){0,3}),?\s+(?:a declarat|a anunțat|a afirmat|a precizat|susține|заявил[аи]?|сообщил[аи]?|отметил[аи]?)`)
 	opinionRE = regexp.MustCompile(`(?i)(?:^|[^\p{L}])(cred că|consider că|în opinia mea|în opinia|mi se pare|părerea mea|по моему мнению|считаю|думаю|на мой взгляд|ar trebui|trebuie să|должны|следует)(?:[^\p{L}]|$)`)
-	predictRE = regexp.MustCompile(`(?i)\b(va crește|va scădea|vor crește|ar putea|urmează să|se așteaptă|prognoz|estimează că|будет|будут|может|планирует|ожидается|прогноз)`)
+	predictRE = regexp.MustCompile(`(?i)(ar putea|se așteaptă|prognoz|estimează că|probabil|ar urma să|может|планирует|ожидается|прогноз|вероятно)`)
+	futureRE  = regexp.MustCompile(`(?i)(va crește|va scădea|vor crește|vor scădea|urmează să|va fi|vor fi|будет|будут|вырастет|снизится)`)
 	rhetorRE  = regexp.MustCompile(`\?\s*$`)
 	quoteRE   = regexp.MustCompile(`[„"«“].{10,}[”"»]`)
 )
@@ -351,6 +352,10 @@ func ClaimCandidates(text string, max int) []ClaimCandidate {
 			c.Checkability = "opinion"
 		case predictRE.MatchString(s.Text) && !hasDecision:
 			c.Checkability = "prediction"
+		case futureRE.MatchString(s.Text) && !hasDecision && !(hasNum && (hasDate(facts) || attrib != "")):
+			// Plain future statements are predictions; scheduled changes with concrete figures and
+			// dates (or an attributed announcement) are checkable announcements.
+			c.Checkability = "prediction"
 		case hasNum || hasDecision:
 			c.Checkability = "checkable"
 		case attrib != "":
@@ -374,6 +379,15 @@ func ClaimCandidates(text string, max int) []ClaimCandidate {
 		}
 	}
 	return out
+}
+
+func hasDate(fs []Fact) bool {
+	for _, f := range fs {
+		if f.Type == "date" {
+			return true
+		}
+	}
+	return false
 }
 
 // ClaimKey normalizes a claim text into a deduplication key (order-insensitive stemmed terms

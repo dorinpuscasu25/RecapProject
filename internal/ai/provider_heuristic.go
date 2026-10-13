@@ -330,6 +330,7 @@ func heurEvidence(in *EvidenceInput) *EvidenceOutput {
 	for _, t := range nlp.KeyTokens(in.Claim) {
 		claimTerms[t] = true
 	}
+	claimNeg := hasNegation(in.Claim)
 	claimFacts := map[string]string{} // key -> type
 	for _, f := range nlp.Facts(in.Claim) {
 		claimFacts[f.Key] = f.Type
@@ -355,14 +356,8 @@ func heurEvidence(in *EvidenceInput) *EvidenceOutput {
 			continue
 		}
 		a.Quote = best
-		lb := " " + strings.ToLower(best) + " "
-		negated := false
-		for _, m := range negationMarkers {
-			if strings.Contains(lb, m) {
-				negated = true
-				break
-			}
-		}
+		// Polarity mismatch (one side negated) with high overlap means contradiction.
+		negated := hasNegation(best) != claimNeg
 		same, differ := 0, 0
 		evFacts := nlp.Facts(best)
 		for _, f := range evFacts {
@@ -391,6 +386,16 @@ func heurEvidence(in *EvidenceInput) *EvidenceOutput {
 		out.Assessments = append(out.Assessments, a)
 	}
 	return out
+}
+
+func hasNegation(s string) bool {
+	lb := " " + strings.ToLower(s) + " "
+	for _, m := range negationMarkers {
+		if strings.Contains(lb, m) {
+			return true
+		}
+	}
+	return false
 }
 
 // ---------- grounded answers ----------
