@@ -9,6 +9,7 @@ import (
 	"github.com/dorinpuscasu25/recapproject/internal/enrich"
 	"github.com/dorinpuscasu25/recapproject/internal/events"
 	"github.com/dorinpuscasu25/recapproject/internal/factcheck"
+	"github.com/dorinpuscasu25/recapproject/internal/feed"
 	"github.com/dorinpuscasu25/recapproject/internal/jobs"
 	"github.com/dorinpuscasu25/recapproject/internal/platform/bus"
 	"github.com/dorinpuscasu25/recapproject/internal/policy"
@@ -26,6 +27,7 @@ type modules struct {
 	Enrich    *enrich.Service
 	Events    *events.Service
 	FactCheck *factcheck.Service
+	Feed      *feed.Service
 	ext       []extension
 }
 

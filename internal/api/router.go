@@ -50,7 +50,7 @@ type API struct {
 // notifications). Nil entries are simply not mounted.
 type Modules struct {
 	FactCheck  FactCheckAPI
-	Experience ExperienceAPI
+	Experience []ExperienceAPI
 }
 
 // FactCheckAPI and ExperienceAPI let those modules mount their own routes.
@@ -110,8 +110,8 @@ func (a *API) Router() http.Handler {
 				if a.Mods.FactCheck != nil {
 					a.Mods.FactCheck.MountConsumer(r)
 				}
-				if a.Mods.Experience != nil {
-					a.Mods.Experience.MountConsumer(r)
+				for _, x := range a.Mods.Experience {
+					x.MountConsumer(r)
 				}
 			})
 
@@ -140,8 +140,8 @@ func (a *API) Router() http.Handler {
 			if a.Mods.FactCheck != nil {
 				a.Mods.FactCheck.MountAdmin(r, requirePerm)
 			}
-			if a.Mods.Experience != nil {
-				a.Mods.Experience.MountAdmin(r, requirePerm)
+			for _, x := range a.Mods.Experience {
+				x.MountAdmin(r, requirePerm)
 			}
 		})
 	})

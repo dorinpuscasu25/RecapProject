@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYNTHETIC FIXTURE — not real news -->
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+<channel><title>Știri Diverse Exemplu</title><language>ro</language>
+<item>
+<title>Un nou centru de tehnologie și startup-uri a fost inaugurat la Chișinău</title>
+<link>https://diverse-exemplu.md/tehnologie/centru-it-chisinau</link>
+<pubDate>Tue, 13 Oct 2026 09:00:00 +0300</pubDate>
+<content:encoded><![CDATA[<p>Un nou centru de tehnologie pentru startup-uri IT a fost inaugurat marți la Chișinău, în sectorul Centru.</p>
+<p>Centrul oferă spații de lucru pentru 300 de programatori și un laborator de inteligență artificială, au anunțat organizatorii.</p>
+<p>Primăria Chișinău a precizat că proiectul digital a fost finanțat din fonduri private.</p>]]></content:encoded>
+</item>
+<item>
+<title>Fermierii din sudul țării au început recoltarea strugurilor</title>
+<link>https://diverse-exemplu.md/agricultura/recolta-struguri</link>
+<pubDate>Tue, 13 Oct 2026 10:00:00 +0300</pubDate>
+<content:encoded><![CDATA[<p>Fermierii din raionul Cahul au început recoltarea strugurilor, iar recolta este estimată la 4500 de tone.</p>
+<p>Ministerul Agriculturii a anunțat că subvențiile agricole pentru irigare vor fi plătite până la sfârșitul lunii.</p>
+<p>Agricultorii spun că seceta a redus recolta de cereale în acest an.</p>]]></content:encoded>
+</item>
+<item>
+<title>Echipa națională de fotbal a câștigat meciul amical de la Chișinău</title>
+<link>https://diverse-exemplu.md/sport/meci-amical</link>
+<pubDate>Tue, 13 Oct 2026 11:00:00 +0300</pubDate>
+<content:encoded><![CDATA[<p>Echipa națională de fotbal a câștigat cu scorul de 2-1 meciul amical disputat pe stadionul din capitală.</p>
+<p>Peste 9000 de spectatori au urmărit partida, care a încheiat campionatul de pregătire.</p>]]></content:encoded>
+</item>
+</channel></rss>
