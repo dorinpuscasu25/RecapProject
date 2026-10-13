@@ -20,14 +20,14 @@ import (
 
 // Problem is the RFC 9457 error body returned for every error response.
 type Problem struct {
-	Type      string               `json:"type"`
-	Title     string               `json:"title"`
-	Status    int                  `json:"status"`
-	Code      string               `json:"code"`
-	Detail    string               `json:"detail,omitempty"`
-	RequestID string               `json:"request_id,omitempty"`
-	Errors    []apperr.FieldError  `json:"errors,omitempty"`
-	Details   map[string]any       `json:"details,omitempty"`
+	Type      string              `json:"type"`
+	Title     string              `json:"title"`
+	Status    int                 `json:"status"`
+	Code      string              `json:"code"`
+	Detail    string              `json:"detail,omitempty"`
+	RequestID string              `json:"request_id,omitempty"`
+	Errors    []apperr.FieldError `json:"errors,omitempty"`
+	Details   map[string]any      `json:"details,omitempty"`
 }
 
 func WriteJSON(w http.ResponseWriter, status int, v any) {

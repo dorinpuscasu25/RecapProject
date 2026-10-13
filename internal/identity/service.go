@@ -76,17 +76,17 @@ type User struct {
 }
 
 type RegisterInput struct {
-	FirstName       string `json:"first_name"`
-	LastName        string `json:"last_name"`
-	Email           string `json:"email"`
-	Phone           string `json:"phone"`
-	Password        string `json:"password"`
-	Locale          string `json:"locale,omitempty"`
-	Timezone        string `json:"timezone,omitempty"`
-	AcceptTerms     bool   `json:"accept_terms"`
-	AcceptPrivacy   bool   `json:"accept_privacy"`
-	MarketingOptIn  bool   `json:"marketing_opt_in"`
-	TermsVersion    string `json:"terms_version,omitempty"`
+	FirstName      string `json:"first_name"`
+	LastName       string `json:"last_name"`
+	Email          string `json:"email"`
+	Phone          string `json:"phone"`
+	Password       string `json:"password"`
+	Locale         string `json:"locale,omitempty"`
+	Timezone       string `json:"timezone,omitempty"`
+	AcceptTerms    bool   `json:"accept_terms"`
+	AcceptPrivacy  bool   `json:"accept_privacy"`
+	MarketingOptIn bool   `json:"marketing_opt_in"`
+	TermsVersion   string `json:"terms_version,omitempty"`
 }
 
 type ClientInfo struct {

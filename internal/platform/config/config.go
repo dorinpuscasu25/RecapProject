@@ -39,15 +39,15 @@ type Config struct {
 	QdrantURL          string
 	QdrantAPIKey       string
 
-	StorageDriver   string // filesystem | s3
-	StorageDir      string
-	S3Endpoint      string
-	S3AccessKey     string
-	S3SecretKey     string
-	S3Bucket        string
-	S3UseSSL        bool
-	S3Region        string
-	StorageURLTTL   time.Duration
+	StorageDriver string // filesystem | s3
+	StorageDir    string
+	S3Endpoint    string
+	S3AccessKey   string
+	S3SecretKey   string
+	S3Bucket      string
+	S3UseSSL      bool
+	S3Region      string
+	StorageURLTTL time.Duration
 
 	Auth AuthConfig
 
@@ -68,17 +68,17 @@ type Config struct {
 	FCMProjectID      string
 	FCMServiceAccount string // JSON
 
-	AnalyticsDriver  string // noop | postgres | clickhouse
-	ClickHouseURL    string
-	OTLPEndpoint     string
-	LangfuseHost     string
-	LangfusePublic   string
-	LangfuseSecret   string
+	AnalyticsDriver string // noop | postgres | clickhouse
+	ClickHouseURL   string
+	OTLPEndpoint    string
+	LangfuseHost    string
+	LangfusePublic  string
+	LangfuseSecret  string
 
-	CrawlUserAgent     string
-	CrawlAllowPrivate  bool // tests only; never in production
-	CrawlLiveEnabled   bool
-	FixtureDir         string
+	CrawlUserAgent    string
+	CrawlAllowPrivate bool // tests only; never in production
+	CrawlLiveEnabled  bool
+	FixtureDir        string
 
 	WorkerConcurrency int
 	SchedulerInterval time.Duration

@@ -44,7 +44,9 @@ func (s *Service) getUserFull(ctx context.Context, q db.Querier, id uuid.UUID) (
 	return u, err
 }
 
-func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (*User, error) { return s.getUserFull(ctx, s.db.Pool, id) }
+func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (*User, error) {
+	return s.getUserFull(ctx, s.db.Pool, id)
+}
 
 // FindUserByEmail is used by operator tooling (bootstrap admin).
 func (s *Service) FindUserByEmail(ctx context.Context, email string) (*User, error) {
@@ -243,14 +245,14 @@ func (s *Service) ConfirmEmailChange(ctx context.Context, p *principal.Principal
 // ---------- Sessions ----------
 
 type Session struct {
-	ID          uuid.UUID  `json:"id"`
-	DeviceLabel string     `json:"device_label"`
-	UserAgent   string     `json:"user_agent"`
-	IPPrefix    string     `json:"ip_prefix"`
-	CreatedAt   time.Time  `json:"created_at"`
-	LastUsedAt  time.Time  `json:"last_used_at"`
-	ExpiresAt   time.Time  `json:"expires_at"`
-	Current     bool       `json:"current"`
+	ID          uuid.UUID `json:"id"`
+	DeviceLabel string    `json:"device_label"`
+	UserAgent   string    `json:"user_agent"`
+	IPPrefix    string    `json:"ip_prefix"`
+	CreatedAt   time.Time `json:"created_at"`
+	LastUsedAt  time.Time `json:"last_used_at"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	Current     bool      `json:"current"`
 }
 
 func (s *Service) ListSessions(ctx context.Context, p *principal.Principal) ([]Session, error) {
@@ -367,14 +369,14 @@ func (s *Service) ListDataRequests(ctx context.Context, p *principal.Principal) 
 func (s *Service) BuildExport(ctx context.Context, userID uuid.UUID) (map[string]any, error) {
 	out := map[string]any{"generated_at": time.Now().UTC(), "format_version": 1}
 	queries := map[string]string{
-		"profile":        `SELECT row_to_json(x) FROM (SELECT id, first_name, last_name, email, phone_e164, status, locale, timezone, marketing_opt_in, created_at, email_verified_at FROM users WHERE id=$1) x`,
-		"preferences":    `SELECT row_to_json(x) FROM (SELECT * FROM user_preferences WHERE user_id=$1) x`,
-		"interests":      `SELECT coalesce(json_agg(x),'[]') FROM (SELECT interest_type, target_key, mode, weight, created_at FROM user_interests WHERE user_id=$1) x`,
-		"sessions":       `SELECT coalesce(json_agg(x),'[]') FROM (SELECT id, device_label, created_at, last_used_at, revoked_at FROM auth_sessions WHERE user_id=$1) x`,
-		"consents":       `SELECT coalesce(json_agg(x),'[]') FROM (SELECT document, policy_version, accepted, created_at FROM user_terms_acceptances WHERE user_id=$1) x`,
-		"chat_sessions":  `SELECT coalesce(json_agg(x),'[]') FROM (SELECT s.id, s.scope_type, s.created_at, (SELECT json_agg(json_build_object('role', m.role, 'content', m.content, 'created_at', m.created_at) ORDER BY m.created_at) FROM chat_messages m WHERE m.session_id=s.id) AS messages FROM chat_sessions s WHERE s.user_id=$1) x`,
-		"briefings":      `SELECT coalesce(json_agg(x),'[]') FROM (SELECT id, status, language, duration_minutes, requested_at FROM briefings WHERE user_id=$1) x`,
-		"notifications":  `SELECT coalesce(json_agg(x),'[]') FROM (SELECT name, kind, local_times, weekdays, timezone, enabled FROM notification_schedules WHERE user_id=$1) x`,
+		"profile":         `SELECT row_to_json(x) FROM (SELECT id, first_name, last_name, email, phone_e164, status, locale, timezone, marketing_opt_in, created_at, email_verified_at FROM users WHERE id=$1) x`,
+		"preferences":     `SELECT row_to_json(x) FROM (SELECT * FROM user_preferences WHERE user_id=$1) x`,
+		"interests":       `SELECT coalesce(json_agg(x),'[]') FROM (SELECT interest_type, target_key, mode, weight, created_at FROM user_interests WHERE user_id=$1) x`,
+		"sessions":        `SELECT coalesce(json_agg(x),'[]') FROM (SELECT id, device_label, created_at, last_used_at, revoked_at FROM auth_sessions WHERE user_id=$1) x`,
+		"consents":        `SELECT coalesce(json_agg(x),'[]') FROM (SELECT document, policy_version, accepted, created_at FROM user_terms_acceptances WHERE user_id=$1) x`,
+		"chat_sessions":   `SELECT coalesce(json_agg(x),'[]') FROM (SELECT s.id, s.scope_type, s.created_at, (SELECT json_agg(json_build_object('role', m.role, 'content', m.content, 'created_at', m.created_at) ORDER BY m.created_at) FROM chat_messages m WHERE m.session_id=s.id) AS messages FROM chat_sessions s WHERE s.user_id=$1) x`,
+		"briefings":       `SELECT coalesce(json_agg(x),'[]') FROM (SELECT id, status, language, duration_minutes, requested_at FROM briefings WHERE user_id=$1) x`,
+		"notifications":   `SELECT coalesce(json_agg(x),'[]') FROM (SELECT name, kind, local_times, weekdays, timezone, enabled FROM notification_schedules WHERE user_id=$1) x`,
 		"followed_events": `SELECT coalesce(json_agg(x),'[]') FROM (SELECT event_id, created_at FROM followed_events WHERE user_id=$1) x`,
 	}
 	for k, q := range queries {

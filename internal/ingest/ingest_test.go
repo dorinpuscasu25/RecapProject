@@ -10,9 +10,9 @@ import (
 func TestCanonicalizeURL(t *testing.T) {
 	cases := map[string]string{
 		"http://WWW.Example.md/stiri/articol-1/?utm_source=fb&b=2&a=1#comments": "https://example.md/stiri/articol-1?a=1&b=2",
-		"https://m.example.md:443/x/":                                          "https://example.md/x",
-		"https://example.md/a/amp":                                             "https://example.md/a",
-		"https://example.md/?fbclid=abc":                                       "https://example.md/",
+		"https://m.example.md:443/x/":                                           "https://example.md/x",
+		"https://example.md/a/amp":                                              "https://example.md/a",
+		"https://example.md/?fbclid=abc":                                        "https://example.md/",
 	}
 	for in, want := range cases {
 		got, err := CanonicalizeURL(in)

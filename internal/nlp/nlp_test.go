@@ -8,7 +8,7 @@ import (
 func TestDetectLanguage(t *testing.T) {
 	cases := map[string]string{
 		"Parlamentul a aprobat astăzi legea privind prețul la energie electrică.": "ro",
-		"Парламент сегодня утвердил закон о цене на электроэнергию.":               "ru",
+		"Парламент сегодня утвердил закон о цене на электроэнергию.":              "ru",
 		"The parliament approved the law on electricity prices today.":            "en",
 	}
 	for text, want := range cases {

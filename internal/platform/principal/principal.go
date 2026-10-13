@@ -42,7 +42,9 @@ func (p *Principal) HasRole(role string) bool {
 
 type ctxKey struct{}
 
-func With(ctx context.Context, p *Principal) context.Context { return context.WithValue(ctx, ctxKey{}, p) }
+func With(ctx context.Context, p *Principal) context.Context {
+	return context.WithValue(ctx, ctxKey{}, p)
+}
 
 func From(ctx context.Context) *Principal {
 	p, _ := ctx.Value(ctxKey{}).(*Principal)

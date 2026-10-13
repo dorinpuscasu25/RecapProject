@@ -97,7 +97,9 @@ func (f *Filesystem) Delete(_ context.Context, key string) error {
 	return nil
 }
 
-func (f *Filesystem) PresignGet(context.Context, string, time.Duration) (string, error) { return "", nil }
+func (f *Filesystem) PresignGet(context.Context, string, time.Duration) (string, error) {
+	return "", nil
+}
 
 // S3 stores objects in an S3-compatible bucket (MinIO locally).
 type S3 struct {

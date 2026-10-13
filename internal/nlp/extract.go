@@ -309,7 +309,7 @@ type ClaimCandidate struct {
 }
 
 var (
-	attribRE = regexp.MustCompile(`(?i)(?:potrivit|conform|a declarat|a anunțat|a afirmat|a precizat|a spus|susține|по словам|по данным|заявил[аи]?|сообщил[аи]?|отметил[аи]?|согласно)\s+([\p{Lu}][\p{L}\-]+(?:\s[\p{Lu}][\p{L}\-]+){0,3})`)
+	attribRE  = regexp.MustCompile(`(?i)(?:potrivit|conform|a declarat|a anunțat|a afirmat|a precizat|a spus|susține|по словам|по данным|заявил[аи]?|сообщил[аи]?|отметил[аи]?|согласно)\s+([\p{Lu}][\p{L}\-]+(?:\s[\p{Lu}][\p{L}\-]+){0,3})`)
 	attribRE2 = regexp.MustCompile(`([\p{Lu}][\p{L}\-]+(?:\s[\p{Lu}][\p{L}\-]+){0,3}),?\s+(?:a declarat|a anunțat|a afirmat|a precizat|susține|заявил[аи]?|сообщил[аи]?|отметил[аи]?)`)
 	opinionRE = regexp.MustCompile(`(?i)(?:^|[^\p{L}])(cred că|consider că|în opinia mea|în opinia|mi se pare|părerea mea|по моему мнению|считаю|думаю|на мой взгляд|ar trebui|trebuie să|должны|следует)(?:[^\p{L}]|$)`)
 	predictRE = regexp.MustCompile(`(?i)\b(va crește|va scădea|vor crește|ar putea|urmează să|se așteaptă|prognoz|estimează că|будет|будут|может|планирует|ожидается|прогноз)`)

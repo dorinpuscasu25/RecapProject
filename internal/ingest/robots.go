@@ -144,7 +144,7 @@ func robotsMatch(pattern, path string) bool {
 		pos += j + len(p)
 	}
 	if anchored {
-		return pos == len(path) || (len(parts) > 1 && parts[len(parts)-1] == "" )
+		return pos == len(path) || (len(parts) > 1 && parts[len(parts)-1] == "")
 	}
 	return true
 }

@@ -477,24 +477,24 @@ func appendRunError(ctx context.Context, tx pgx.Tx, runID uuid.UUID, url, msg st
 
 // Candidate is a normalized article ready for persistence.
 type Candidate struct {
-	PublisherID    uuid.UUID
-	EndpointID     *uuid.UUID
-	OriginalURL    string
-	CanonicalURL   string
-	Title          string
-	Byline         string
-	Description    string
-	Text           string
-	Language       string
-	LanguageConf   float64
-	PublishedAt    *time.Time
-	ModifiedAt     *time.Time
-	Confidence     float64
-	ContentType    string
-	Tags           []string
-	RawObjectKey   *string
-	Permission     *sources.Permission
-	Diagnostics    *Extracted
+	PublisherID  uuid.UUID
+	EndpointID   *uuid.UUID
+	OriginalURL  string
+	CanonicalURL string
+	Title        string
+	Byline       string
+	Description  string
+	Text         string
+	Language     string
+	LanguageConf float64
+	PublishedAt  *time.Time
+	ModifiedAt   *time.Time
+	Confidence   float64
+	ContentType  string
+	Tags         []string
+	RawObjectKey *string
+	Permission   *sources.Permission
+	Diagnostics  *Extracted
 }
 
 const maxBodyChars = 100_000
@@ -588,11 +588,11 @@ var correctionMarkers = []string{"corecție", "rectificare", "erată", "actualiz
 
 // PersistResult reports the deduplication outcome.
 type PersistResult struct {
-	ArticleID   uuid.UUID `json:"article_id"`
-	Outcome     string    `json:"outcome"` // new | updated | unchanged | duplicate | quarantined
+	ArticleID   uuid.UUID  `json:"article_id"`
+	Outcome     string     `json:"outcome"` // new | updated | unchanged | duplicate | quarantined
 	DuplicateOf *uuid.UUID `json:"duplicate_of,omitempty"`
-	Kind        string    `json:"duplicate_kind,omitempty"`
-	Revision    int       `json:"revision"`
+	Kind        string     `json:"duplicate_kind,omitempty"`
+	Revision    int        `json:"revision"`
 }
 
 // PersistArticle applies dedupe rules and writes the article + revision + outbox events in tx.
@@ -796,13 +796,13 @@ func truncate(s string, n int) string {
 const JobReprocess = "articles.reprocess"
 
 type ReprocessRequest struct {
-	SourceEndpointID *uuid.UUID `json:"source_endpoint_id,omitempty"`
-	PublisherID      *uuid.UUID `json:"publisher_id,omitempty"`
+	SourceEndpointID *uuid.UUID  `json:"source_endpoint_id,omitempty"`
+	PublisherID      *uuid.UUID  `json:"publisher_id,omitempty"`
 	ArticleIDs       []uuid.UUID `json:"article_ids,omitempty"`
-	Since            *time.Time `json:"since,omitempty"`
-	Until            *time.Time `json:"until,omitempty"`
-	Reason           string     `json:"reason"`
-	Limit            int        `json:"limit,omitempty"`
+	Since            *time.Time  `json:"since,omitempty"`
+	Until            *time.Time  `json:"until,omitempty"`
+	Reason           string      `json:"reason"`
+	Limit            int         `json:"limit,omitempty"`
 }
 
 // RequestReprocess enqueues a bounded reprocessing job (selective source/date window).

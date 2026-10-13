@@ -25,19 +25,19 @@ type TestSourceInput struct {
 }
 
 type ItemPreview struct {
-	URL           string     `json:"url"`
-	CanonicalURL  string     `json:"canonical_url"`
-	Title         string     `json:"title"`
-	PublishedAt   *time.Time `json:"published_at,omitempty"`
-	Language      string     `json:"language"`
-	LanguageConf  float64    `json:"language_confidence"`
-	Byline        string     `json:"byline,omitempty"`
-	TextPreview   string     `json:"text_preview,omitempty"`
-	TextChars     int        `json:"text_chars"`
-	Confidence    float64    `json:"extraction_confidence"`
+	URL           string            `json:"url"`
+	CanonicalURL  string            `json:"canonical_url"`
+	Title         string            `json:"title"`
+	PublishedAt   *time.Time        `json:"published_at,omitempty"`
+	Language      string            `json:"language"`
+	LanguageConf  float64           `json:"language_confidence"`
+	Byline        string            `json:"byline,omitempty"`
+	TextPreview   string            `json:"text_preview,omitempty"`
+	TextChars     int               `json:"text_chars"`
+	Confidence    float64           `json:"extraction_confidence"`
 	SelectorsUsed map[string]string `json:"selectors_used,omitempty"`
-	Warnings      []string   `json:"warnings,omitempty"`
-	Error         string     `json:"error,omitempty"`
+	Warnings      []string          `json:"warnings,omitempty"`
+	Error         string            `json:"error,omitempty"`
 }
 
 type TestSourceResult struct {

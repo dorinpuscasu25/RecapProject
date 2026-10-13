@@ -61,9 +61,9 @@ type PublicCategory struct {
 type Service struct {
 	db *db.DB
 
-	mu          sync.RWMutex
-	cachedVer   int64
-	cachedAll   []Category
+	mu        sync.RWMutex
+	cachedVer int64
+	cachedAll []Category
 }
 
 func NewService(d *db.DB) *Service { return &Service{db: d} }
@@ -239,23 +239,23 @@ func (s *Service) Resolve(ctx context.Context, id uuid.UUID) (uuid.UUID, error) 
 // ---------- Mutations ----------
 
 type Input struct {
-	Slug                 *string            `json:"slug,omitempty"`
-	ParentID             *uuid.UUID         `json:"parent_id,omitempty"`
-	ClearParent          bool               `json:"clear_parent,omitempty"`
-	Names                map[string]string  `json:"names,omitempty"`
-	Descriptions         map[string]string  `json:"descriptions,omitempty"`
-	EditorialDescription *string            `json:"editorial_description,omitempty"`
-	IconKey              *string            `json:"icon_key,omitempty"`
-	DisplayOrder         *int               `json:"display_order,omitempty"`
-	Status               *string            `json:"status,omitempty"`
-	ClassificationHints  []string           `json:"classification_hints,omitempty"`
-	PositiveExamples     []string           `json:"positive_examples,omitempty"`
-	NegativeExamples     []string           `json:"negative_examples,omitempty"`
-	RoutingLabels        []string           `json:"routing_labels,omitempty"`
-	Aliases              []string           `json:"aliases,omitempty"`
-	Boost                *float32           `json:"boost,omitempty"`
-	AutoClassify         *bool              `json:"auto_classify,omitempty"`
-	Version              *int               `json:"version,omitempty"`
+	Slug                 *string           `json:"slug,omitempty"`
+	ParentID             *uuid.UUID        `json:"parent_id,omitempty"`
+	ClearParent          bool              `json:"clear_parent,omitempty"`
+	Names                map[string]string `json:"names,omitempty"`
+	Descriptions         map[string]string `json:"descriptions,omitempty"`
+	EditorialDescription *string           `json:"editorial_description,omitempty"`
+	IconKey              *string           `json:"icon_key,omitempty"`
+	DisplayOrder         *int              `json:"display_order,omitempty"`
+	Status               *string           `json:"status,omitempty"`
+	ClassificationHints  []string          `json:"classification_hints,omitempty"`
+	PositiveExamples     []string          `json:"positive_examples,omitempty"`
+	NegativeExamples     []string          `json:"negative_examples,omitempty"`
+	RoutingLabels        []string          `json:"routing_labels,omitempty"`
+	Aliases              []string          `json:"aliases,omitempty"`
+	Boost                *float32          `json:"boost,omitempty"`
+	AutoClassify         *bool             `json:"auto_classify,omitempty"`
+	Version              *int              `json:"version,omitempty"`
 }
 
 var slugRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)

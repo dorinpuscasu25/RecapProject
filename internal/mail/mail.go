@@ -99,10 +99,10 @@ func (w *Worker) RunOnce(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	type item struct {
-		id                     uuid.UUID
-		key, to, tmpl, locale  string
-		payload                []byte
-		attempts, maxAttempts  int
+		id                    uuid.UUID
+		key, to, tmpl, locale string
+		payload               []byte
+		attempts, maxAttempts int
 	}
 	var items []item
 	rows, err := w.DB.Pool.Query(ctx, `

@@ -458,22 +458,22 @@ func (s *Service) SetEndpointStatus(ctx context.Context, id uuid.UUID, status st
 // ============ Crawl runs & health ============
 
 type CrawlRun struct {
-	ID              uuid.UUID       `json:"id"`
-	SourceEndpoint  uuid.UUID       `json:"source_endpoint_id"`
-	Trigger         string          `json:"trigger"`
-	Status          string          `json:"status"`
-	StartedAt       time.Time       `json:"started_at"`
-	CompletedAt     *time.Time      `json:"completed_at,omitempty"`
-	HTTPStatus      *int            `json:"http_status,omitempty"`
-	NotModified     bool            `json:"not_modified"`
-	Discovered      int             `json:"discovered_count"`
-	Fetched         int             `json:"fetched_count"`
-	Accepted        int             `json:"accepted_count"`
-	Duplicates      int             `json:"duplicate_count"`
-	Rejected        int             `json:"rejected_count"`
-	Errors          int             `json:"error_count"`
-	ErrorDetails    json.RawMessage `json:"errors"`
-	DurationMS      *int            `json:"duration_ms,omitempty"`
+	ID             uuid.UUID       `json:"id"`
+	SourceEndpoint uuid.UUID       `json:"source_endpoint_id"`
+	Trigger        string          `json:"trigger"`
+	Status         string          `json:"status"`
+	StartedAt      time.Time       `json:"started_at"`
+	CompletedAt    *time.Time      `json:"completed_at,omitempty"`
+	HTTPStatus     *int            `json:"http_status,omitempty"`
+	NotModified    bool            `json:"not_modified"`
+	Discovered     int             `json:"discovered_count"`
+	Fetched        int             `json:"fetched_count"`
+	Accepted       int             `json:"accepted_count"`
+	Duplicates     int             `json:"duplicate_count"`
+	Rejected       int             `json:"rejected_count"`
+	Errors         int             `json:"error_count"`
+	ErrorDetails   json.RawMessage `json:"errors"`
+	DurationMS     *int            `json:"duration_ms,omitempty"`
 }
 
 func (s *Service) ListCrawlRuns(ctx context.Context, endpointID uuid.UUID, limit int) ([]CrawlRun, error) {

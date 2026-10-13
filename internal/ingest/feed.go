@@ -313,7 +313,9 @@ func resolve(base, ref string) string {
 	return b.ResolveReference(r).String()
 }
 
-func clean(s string) string { return strings.TrimSpace(strings.Join(strings.Fields(html.UnescapeString(s)), " ")) }
+func clean(s string) string {
+	return strings.TrimSpace(strings.Join(strings.Fields(html.UnescapeString(s)), " "))
+}
 
 func firstNonEmpty(vs ...string) string {
 	for _, v := range vs {

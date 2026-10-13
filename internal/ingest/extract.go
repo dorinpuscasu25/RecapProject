@@ -21,18 +21,18 @@ const ExtractorVersion = "html-extract/1.2.0"
 
 // Extracted is the normalized result of HTML extraction.
 type Extracted struct {
-	Title        string     `json:"title"`
-	Byline       string     `json:"byline"`
-	Description  string     `json:"description"`
-	Text         string     `json:"text"`
-	CanonicalURL string     `json:"canonical_url"`
-	PublishedAt  *time.Time `json:"published_at,omitempty"`
-	ModifiedAt   *time.Time `json:"modified_at,omitempty"`
-	Language     string     `json:"language"`
-	LanguageConf float64    `json:"language_confidence"`
-	Confidence   float64    `json:"confidence"`
+	Title         string            `json:"title"`
+	Byline        string            `json:"byline"`
+	Description   string            `json:"description"`
+	Text          string            `json:"text"`
+	CanonicalURL  string            `json:"canonical_url"`
+	PublishedAt   *time.Time        `json:"published_at,omitempty"`
+	ModifiedAt    *time.Time        `json:"modified_at,omitempty"`
+	Language      string            `json:"language"`
+	LanguageConf  float64           `json:"language_confidence"`
+	Confidence    float64           `json:"confidence"`
 	SelectorsUsed map[string]string `json:"selectors_used"`
-	Warnings     []string   `json:"warnings,omitempty"`
+	Warnings      []string          `json:"warnings,omitempty"`
 }
 
 // ValidateSelector compiles a CSS selector (no code execution; selectors only).

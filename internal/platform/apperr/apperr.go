@@ -49,13 +49,13 @@ func (e *Error) Unwrap() error { return e.Err }
 
 func New(kind Kind, code, msg string) *Error { return &Error{Kind: kind, Code: code, Message: msg} }
 
-func BadRequest(code, msg string) *Error    { return New(KindBadRequest, code, msg) }
+func BadRequest(code, msg string) *Error      { return New(KindBadRequest, code, msg) }
 func Unauthenticated(code, msg string) *Error { return New(KindUnauthenticated, code, msg) }
-func Forbidden(code, msg string) *Error     { return New(KindForbidden, code, msg) }
-func NotFound(code, msg string) *Error      { return New(KindNotFound, code, msg) }
-func Conflict(code, msg string) *Error      { return New(KindConflict, code, msg) }
-func Unavailable(code, msg string) *Error   { return New(KindUnavailable, code, msg) }
-func Gone(code, msg string) *Error          { return New(KindGone, code, msg) }
+func Forbidden(code, msg string) *Error       { return New(KindForbidden, code, msg) }
+func NotFound(code, msg string) *Error        { return New(KindNotFound, code, msg) }
+func Conflict(code, msg string) *Error        { return New(KindConflict, code, msg) }
+func Unavailable(code, msg string) *Error     { return New(KindUnavailable, code, msg) }
+func Gone(code, msg string) *Error            { return New(KindGone, code, msg) }
 
 func Validation(fields ...FieldError) *Error {
 	return &Error{Kind: KindValidation, Code: "validation_failed", Message: "One or more fields are invalid.", Fields: fields}
@@ -103,7 +103,9 @@ func Is(err error, code string) bool {
 // Validator accumulates field errors.
 type Validator struct{ fields []FieldError }
 
-func (v *Validator) Add(field, code, msg string) { v.fields = append(v.fields, FieldError{field, code, msg}) }
+func (v *Validator) Add(field, code, msg string) {
+	v.fields = append(v.fields, FieldError{field, code, msg})
+}
 func (v *Validator) Check(ok bool, field, code, msg string) {
 	if !ok {
 		v.Add(field, code, msg)

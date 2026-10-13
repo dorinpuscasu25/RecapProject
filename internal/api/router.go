@@ -11,10 +11,10 @@ import (
 
 	apidocs "github.com/dorinpuscasu25/recapproject/api"
 	"github.com/dorinpuscasu25/recapproject/internal/identity"
-	"github.com/dorinpuscasu25/recapproject/internal/platform/apperr"
 	"github.com/dorinpuscasu25/recapproject/internal/ingest"
 	"github.com/dorinpuscasu25/recapproject/internal/jobs"
 	"github.com/dorinpuscasu25/recapproject/internal/mail"
+	"github.com/dorinpuscasu25/recapproject/internal/platform/apperr"
 	"github.com/dorinpuscasu25/recapproject/internal/platform/config"
 	"github.com/dorinpuscasu25/recapproject/internal/platform/db"
 	"github.com/dorinpuscasu25/recapproject/internal/platform/httpx"
@@ -49,7 +49,9 @@ func (a *API) Router() http.Handler {
 	r.Use(httpx.RequestID, httpx.WithLogger(a.Log), httpx.Recoverer, httpx.Tracing(a.Cfg.ServiceName), httpx.AccessLog,
 		httpx.SecurityHeaders, httpx.CORS(a.Cfg.CORSOrigins), httpx.BodyLimit(a.Cfg.MaxBodyBytes))
 
-	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) { httpx.WriteJSON(w, 200, map[string]string{"status": "ok"}) })
+	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		httpx.WriteJSON(w, 200, map[string]string{"status": "ok"})
+	})
 	r.Get("/readyz", a.ready)
 	r.Get("/openapi.yaml", serveOpenAPI)
 
