@@ -544,6 +544,16 @@ func (s *Service) buildCandidate(ctx context.Context, e *sources.Endpoint, prof 
 			c.CanonicalURL = ex.CanonicalURL
 		}
 	}
+	if e.EndpointType == "fixture" {
+		if d := s.fetcher.FixtureShift(s.now()); d != 0 {
+			for _, t := range []**time.Time{&c.PublishedAt, &c.ModifiedAt} {
+				if *t != nil {
+					v := (*t).Add(d)
+					*t = &v
+				}
+			}
+		}
+	}
 	if c.CanonicalURL == "" {
 		c.CanonicalURL = it.URL
 	}

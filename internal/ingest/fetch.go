@@ -44,12 +44,24 @@ type Fetcher struct {
 	FixtureDir  string
 	Limiter     ratelimit.Limiter
 	LiveEnabled bool
-	client      *http.Client
+	// FixtureAnchor, when set, is the reference "now" the fixture corpus was written for: dates of
+	// fixture content are shifted by (now - anchor) so recency windows behave the same on any day.
+	// Development/test only; it never applies to live endpoints.
+	FixtureAnchor *time.Time
+	client        *http.Client
 	robots      robotsCache
 }
 
 func NewFetcher(policy ssrf.Policy, ua, fixtureDir string, limiter ratelimit.Limiter, live bool) *Fetcher {
 	return &Fetcher{Policy: policy, UserAgent: ua, FixtureDir: fixtureDir, Limiter: limiter, LiveEnabled: live, client: policy.Client(30 * time.Second)}
+}
+
+// FixtureShift returns the offset to apply to fixture content dates.
+func (f *Fetcher) FixtureShift(now time.Time) time.Duration {
+	if f.FixtureAnchor == nil {
+		return 0
+	}
+	return now.Sub(*f.FixtureAnchor).Truncate(time.Minute)
 }
 
 var ErrRobotsDisallowed = errors.New("disallowed by robots.txt")

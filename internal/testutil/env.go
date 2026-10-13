@@ -116,6 +116,9 @@ func RepoRoot() string {
 }
 
 // Env is a running test environment.
+// FixtureAnchor is the reference time the fixture corpus (fixtures/feeds) was authored for.
+const FixtureAnchor = "2026-10-14T01:00:00+03:00"
+
 type Env struct {
 	T      testing.TB
 	App    *app.App
@@ -156,6 +159,8 @@ func NewEnv(t testing.TB, opts ...EnvOption) *Env {
 	t.Setenv("FIXTURE_DIR", filepath.Join(RepoRoot(), "fixtures"))
 	t.Setenv("STORAGE_DIR", t.TempDir())
 	t.Setenv("CRAWL_LIVE_ENABLED", "false")
+	// The synthetic corpus is dated around this instant; shifting keeps recency windows stable.
+	t.Setenv("FIXTURE_TIME_ANCHOR", FixtureAnchor)
 	t.Setenv("SECRETS_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)))
 	t.Setenv("AUTH_CODE_HMAC_SECRET", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{9}, 32)))
 	cfg, err := config.Load()

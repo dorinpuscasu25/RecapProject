@@ -80,6 +80,7 @@ type Config struct {
 	CrawlAllowPrivate bool // tests only; never in production
 	CrawlLiveEnabled  bool
 	FixtureDir        string
+	FixtureTimeAnchor *time.Time // FIXTURE_TIME_ANCHOR (RFC3339); dev/test only
 
 	WorkerConcurrency int
 	SchedulerInterval time.Duration
@@ -234,6 +235,17 @@ func Load() (*Config, error) {
 	c.SecretsEncryptionKey, err = secretBytes("SECRETS_ENCRYPTION_KEY", c.IsProduction())
 	if err != nil {
 		errs = append(errs, err)
+	}
+	if v := env("FIXTURE_TIME_ANCHOR", ""); v != "" {
+		t, perr := time.Parse(time.RFC3339, v)
+		switch {
+		case perr != nil:
+			errs = append(errs, fmt.Errorf("FIXTURE_TIME_ANCHOR must be RFC3339: %w", perr))
+		case c.IsProduction():
+			errs = append(errs, errors.New("FIXTURE_TIME_ANCHOR must not be set in production"))
+		default:
+			c.FixtureTimeAnchor = &t
+		}
 	}
 	if c.IsProduction() && c.CrawlAllowPrivate {
 		errs = append(errs, errors.New("CRAWL_ALLOW_PRIVATE_NETWORKS must not be enabled in production"))

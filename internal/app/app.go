@@ -115,6 +115,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts Options
 	a.Taxonomy = taxonomy.NewService(d)
 	a.Sources = sources.NewService(d, policy)
 	fetcher := ingest.NewFetcher(policy, cfg.CrawlUserAgent, cfg.FixtureDir, a.Limiter, cfg.CrawlLiveEnabled)
+	fetcher.FixtureAnchor = cfg.FixtureTimeAnchor
 	a.Ingest = ingest.NewService(d, a.Sources, fetcher, a.Store, log)
 
 	a.mods, err = newModules(ctx, a)
