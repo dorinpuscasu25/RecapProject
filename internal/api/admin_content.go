@@ -211,11 +211,11 @@ func (a *API) adminContent(r chi.Router) {
 	// ---- Evaluation results (ai:evaluate); runs are started with `newsctl eval` ----
 	r.Group(func(r chi.Router) {
 		r.Use(identity.Require("ai:evaluate"))
-		r.Get("/admin/ai/evals", h(func(r *http.Request) (int, any, error) {
+		r.Get("/admin/ai/evaluations", h(func(r *http.Request) (int, any, error) {
 			l, err := eval.Runs(r.Context(), a.DB, r.URL.Query().Get("suite"), httpx.Limit(r, 50, 200))
 			return 200, list(l), err
 		}))
-		r.Get("/admin/ai/evals/{id}", h(func(r *http.Request) (int, any, error) {
+		r.Get("/admin/ai/evaluations/{id}", h(func(r *http.Request) (int, any, error) {
 			id, err := pathID(r, "id", "eval_run")
 			if err != nil {
 				return 0, nil, err

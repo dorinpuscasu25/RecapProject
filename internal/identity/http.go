@@ -400,7 +400,8 @@ func Require(perm string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !principal.From(r.Context()).Can(perm) {
-				httpx.WriteError(w, r, apperr.Forbidden("auth.forbidden", "You do not have permission to perform this action."))
+				httpx.WriteError(w, r, apperr.Forbidden("auth.forbidden", "You do not have permission to perform this action.").
+					WithDetail("required_permission", perm))
 				return
 			}
 			next.ServeHTTP(w, r)

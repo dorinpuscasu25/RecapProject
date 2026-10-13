@@ -37,6 +37,15 @@ func (h *Handler) MountConsumer(r chi.Router) {
 		l, err := h.Svc.Schedules(r.Context(), u)
 		return 200, map[string]any{"items": l}, err
 	}))
+	// PUT /notifications/schedules manages the user's "default" schedule; named schedules allow several.
+	r.Put("/notifications/schedules", wrap(func(r *http.Request, u uuid.UUID) (int, any, error) {
+		var in ScheduleInput
+		if err := httpx.DecodeJSON(r, &in); err != nil {
+			return 0, nil, err
+		}
+		v, err := h.Svc.PutSchedule(r.Context(), u, "default", in)
+		return 200, v, err
+	}))
 	r.Put("/notifications/schedules/{name}", wrap(func(r *http.Request, u uuid.UUID) (int, any, error) {
 		var in ScheduleInput
 		if err := httpx.DecodeJSON(r, &in); err != nil {

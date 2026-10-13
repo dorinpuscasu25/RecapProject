@@ -24,15 +24,15 @@ func TestEvalSuitesMeetGates(t *testing.T) {
 		t.Logf("%s on %s: %d/%d cases, metrics %v", s, rep.Model, rep.Passed, rep.Cases, rep.Metrics)
 	}
 	admin := e.Admin("eval-admin@example.com", "analyst")
-	runs := e.MustStatus(e.Do("GET", "/v1/admin/ai/evals?suite=answers", admin, nil), 200)
+	runs := e.MustStatus(e.Do("GET", "/v1/admin/ai/evaluations?suite=answers", admin, nil), 200)
 	if len(runs.Items()) != 1 {
 		t.Fatalf("eval runs: %s", runs.Raw)
 	}
 	id := runs.Items()[0].(map[string]any)["id"].(string)
-	res := e.MustStatus(e.Do("GET", "/v1/admin/ai/evals/"+id, admin, nil), 200)
+	res := e.MustStatus(e.Do("GET", "/v1/admin/ai/evaluations/"+id, admin, nil), 200)
 	if len(res.Get("results").([]any)) != 7 {
 		t.Fatalf("eval results: %s", res.Raw)
 	}
 	user, _, _ := e.RegisterVerified("eval-user@example.com")
-	e.MustStatus(e.Do("GET", "/v1/admin/ai/evals", user, nil), 403)
+	e.MustStatus(e.Do("GET", "/v1/admin/ai/evaluations", user, nil), 403)
 }
