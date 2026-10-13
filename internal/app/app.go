@@ -121,7 +121,9 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts Options
 	if err != nil {
 		return nil, err
 	}
-	a.api = &api.API{Cfg: cfg, DB: d, Log: log, Identity: a.Identity, Taxonomy: a.Taxonomy, Sources: a.Sources, Ingest: a.Ingest, Ext: a.mods}
+	a.api = &api.API{Cfg: cfg, DB: d, Log: log, Identity: a.Identity, Taxonomy: a.Taxonomy, Sources: a.Sources, Ingest: a.Ingest,
+		Policy: a.mods.Policy, AI: a.mods.AI, Search: a.mods.Search, Enrich: a.mods.Enrich, Events: a.mods.Events}
+	a.mods.wireAPI(a.api)
 	return a, nil
 }
 

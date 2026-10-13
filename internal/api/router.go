@@ -10,6 +10,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	apidocs "github.com/dorinpuscasu25/recapproject/api"
+	"github.com/dorinpuscasu25/recapproject/internal/ai"
+	"github.com/dorinpuscasu25/recapproject/internal/enrich"
+	"github.com/dorinpuscasu25/recapproject/internal/events"
 	"github.com/dorinpuscasu25/recapproject/internal/identity"
 	"github.com/dorinpuscasu25/recapproject/internal/ingest"
 	"github.com/dorinpuscasu25/recapproject/internal/jobs"
@@ -18,6 +21,8 @@ import (
 	"github.com/dorinpuscasu25/recapproject/internal/platform/config"
 	"github.com/dorinpuscasu25/recapproject/internal/platform/db"
 	"github.com/dorinpuscasu25/recapproject/internal/platform/httpx"
+	"github.com/dorinpuscasu25/recapproject/internal/policy"
+	"github.com/dorinpuscasu25/recapproject/internal/search"
 	"github.com/dorinpuscasu25/recapproject/internal/sources"
 	"github.com/dorinpuscasu25/recapproject/internal/taxonomy"
 
@@ -33,14 +38,30 @@ type API struct {
 	Taxonomy *taxonomy.Service
 	Sources  *sources.Service
 	Ingest   *ingest.Service
-	Ext      Extensions
+	Policy   *policy.Store
+	AI       *ai.Gateway
+	Search   *search.Service
+	Enrich   *enrich.Service
+	Events   *events.Service
+	Mods     Modules
 }
 
-// Extensions are optional modules mounted by the app container (kept as an interface to avoid
-// coupling the router to every module's concrete type).
-type Extensions interface {
+// Modules holds experience modules added after the core (fact-checking, feed, briefings, chat,
+// notifications). Nil entries are simply not mounted.
+type Modules struct {
+	FactCheck  FactCheckAPI
+	Experience ExperienceAPI
+}
+
+// FactCheckAPI and ExperienceAPI let those modules mount their own routes.
+type FactCheckAPI interface {
 	MountConsumer(r chi.Router)
-	MountAdmin(r chi.Router)
+	MountAdmin(r chi.Router, perm func(string) func(http.HandlerFunc) http.HandlerFunc)
+}
+
+type ExperienceAPI interface {
+	MountConsumer(r chi.Router)
+	MountAdmin(r chi.Router, perm func(string) func(http.HandlerFunc) http.HandlerFunc)
 }
 
 // Router builds the HTTP handler.
@@ -85,8 +106,12 @@ func (a *API) Router() http.Handler {
 			r.Group(func(r chi.Router) {
 				r.Use(identity.RequireUser, identity.Require("news:read"))
 				a.consumerCategories(r)
-				if a.Ext != nil {
-					a.Ext.MountConsumer(r)
+				a.consumerEvents(r)
+				if a.Mods.FactCheck != nil {
+					a.Mods.FactCheck.MountConsumer(r)
+				}
+				if a.Mods.Experience != nil {
+					a.Mods.Experience.MountConsumer(r)
 				}
 			})
 
@@ -111,8 +136,12 @@ func (a *API) Router() http.Handler {
 				r.Use(identity.Require("audit:read"))
 				a.adminAudit(r)
 			})
-			if a.Ext != nil {
-				a.Ext.MountAdmin(r)
+			a.adminContent(r)
+			if a.Mods.FactCheck != nil {
+				a.Mods.FactCheck.MountAdmin(r, requirePerm)
+			}
+			if a.Mods.Experience != nil {
+				a.Mods.Experience.MountAdmin(r, requirePerm)
 			}
 		})
 	})

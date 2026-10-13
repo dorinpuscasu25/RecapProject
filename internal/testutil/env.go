@@ -31,6 +31,7 @@ import (
 	"github.com/dorinpuscasu25/recapproject/internal/platform/ids"
 	"github.com/dorinpuscasu25/recapproject/internal/platform/ratelimit"
 	"github.com/dorinpuscasu25/recapproject/internal/platform/storage"
+	"github.com/dorinpuscasu25/recapproject/internal/seed"
 	"github.com/dorinpuscasu25/recapproject/migrations"
 )
 
@@ -124,6 +125,14 @@ type Env struct {
 
 type EnvOption func(*config.Config, *app.Options)
 
+// envSettings are test-harness settings (not app config).
+var skipCategorySeed = map[*config.Config]bool{}
+
+// WithoutCategorySeed starts with an empty taxonomy (admin creates categories in the test).
+func WithoutCategorySeed() EnvOption {
+	return func(c *config.Config, _ *app.Options) { skipCategorySeed[c] = true }
+}
+
 // WithRateLimiter overrides the limiter (default: no-op to avoid flakiness; rate-limit tests use memory).
 func WithRateLimiter(l ratelimit.Limiter) EnvOption {
 	return func(_ *config.Config, o *app.Options) { o.Limiter = l }
@@ -165,6 +174,9 @@ func NewEnv(t testing.TB, opts ...EnvOption) *Env {
 	a, err := app.New(ctx, cfg, log, o)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if err := seed.Run(ctx, a.DB, seed.Options{Categories: !skipCategorySeed[cfg], Entities: true}); err != nil {
+		t.Fatalf("seed: %v", err)
 	}
 	srv := httptest.NewServer(a.Handler())
 	t.Cleanup(func() {
@@ -307,4 +319,45 @@ func (e *Env) Admin(email string, roles ...string) string {
 	}
 	identityInvalidate()
 	return tok
+}
+
+// FixtureSource describes a synthetic source to configure through the admin API.
+type FixtureSource struct {
+	Name, Domain, Type, Feed string
+	FetchPages               bool
+	Languages                []string
+}
+
+// SetupSource creates a publisher, grants permission, creates and enables a fixture endpoint.
+// Returns (publisherID, endpointID).
+func (e *Env) SetupSource(admin string, s FixtureSource) (string, string) {
+	e.T.Helper()
+	if s.Type == "" {
+		s.Type = "newsroom"
+	}
+	pub := e.MustStatus(e.Do("POST", "/v1/admin/publishers", admin, map[string]any{"name": s.Name, "canonical_domain": s.Domain,
+		"publisher_type": s.Type, "primary_languages": s.Languages}), 201)
+	pid := pub.Str("id")
+	e.MustStatus(e.Do("PUT", "/v1/admin/publishers/"+pid+"/permissions", admin, map[string]any{"legal_basis": "synthetic test fixture",
+		"permission_status": "granted", "allow_crawl": true, "allow_store_full_text": true, "allow_summarize": true, "allow_embed": true,
+		"allow_snippets": true, "allow_audio": true, "robots_review_status": "compliant", "terms_review_status": "compliant", "attribution_text": "Sursa: " + s.Name}), 200)
+	e.MustStatus(e.Do("PATCH", "/v1/admin/publishers/"+pid, admin, map[string]any{"status": "active"}), 200)
+	ep := e.MustStatus(e.Do("POST", "/v1/admin/sources", admin, map[string]any{"publisher_id": pid, "name": s.Name + " feed", "endpoint_type": "fixture",
+		"entry_url": "fixture://feeds/" + s.Feed, "fetch_article_pages": s.FetchPages, "languages": s.Languages, "poll_interval_seconds": 900}), 201)
+	eid := ep.Str("id")
+	e.MustStatus(e.Do("POST", "/v1/admin/sources/"+eid+"/enable", admin, nil), 200)
+	return pid, eid
+}
+
+// Crawl forces a crawl of an endpoint and processes the whole pipeline.
+func (e *Env) Crawl(admin, endpointID string) {
+	e.T.Helper()
+	e.MustStatus(e.Do("POST", "/v1/admin/sources/"+endpointID+"/crawl", admin, map[string]any{"max_items": 20}), 202)
+	e.Drain()
+}
+
+// SwitchFeed points an endpoint at another fixture feed file.
+func (e *Env) SwitchFeed(admin, endpointID, feed string) {
+	e.T.Helper()
+	e.MustStatus(e.Do("PATCH", "/v1/admin/sources/"+endpointID, admin, map[string]any{"entry_url": "fixture://feeds/" + feed}), 200)
 }

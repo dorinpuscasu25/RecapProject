@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYNTHETIC FIXTURE — not real news -->
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+<channel>
+<title>Новости Пример</title>
+<language>ru</language>
+<item>
+<title>НАРЭ утвердило повышение тарифа на электроэнергию на 15%</title>
+<link>https://novosti-primer.md/ekonomika/nare-tarif-elektroenergiya</link>
+<guid>novosti-2001</guid>
+<pubDate>Mon, 12 Oct 2026 10:30:00 +0300</pubDate>
+<content:encoded><![CDATA[<p>Национальное агентство по регулированию в энергетике (НАРЭ) в понедельник утвердило повышение тарифа на электроэнергию для бытовых потребителей на 15%.</p>
+<p>Согласно решению, тариф вырастет с 3,05 лея до 3,51 лея за киловатт-час с 1 ноября 2026 года.</p>
+<p>Решение было принято на заседании административного совета агентства по запросу поставщика Энергоком.</p>
+<p>Оппозиция раскритиковала решение и потребовала от правительства компенсаций для уязвимых семей.</p>]]></content:encoded>
+</item>
+</channel>
+</rss>

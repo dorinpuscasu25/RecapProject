@@ -38,6 +38,7 @@ type Config struct {
 	OpenSearchPrefix   string
 	QdrantURL          string
 	QdrantAPIKey       string
+	QdrantPrefix       string
 
 	StorageDriver string // filesystem | s3
 	StorageDir    string
@@ -134,6 +135,7 @@ func Load() (*Config, error) {
 		OpenSearchPrefix:   env("OPENSEARCH_INDEX_PREFIX", "newsintel"),
 		QdrantURL:          env("QDRANT_URL", ""),
 		QdrantAPIKey:       env("QDRANT_API_KEY", ""),
+		QdrantPrefix:       env("QDRANT_COLLECTION_PREFIX", "newsintel_"),
 
 		StorageDriver: env("STORAGE_DRIVER", "filesystem"),
 		StorageDir:    env("STORAGE_DIR", "./var/storage"),
@@ -235,6 +237,9 @@ func Load() (*Config, error) {
 	}
 	if c.IsProduction() && c.CrawlAllowPrivate {
 		errs = append(errs, errors.New("CRAWL_ALLOW_PRIVATE_NETWORKS must not be enabled in production"))
+	}
+	if c.IsProduction() && c.QdrantURL == "" {
+		errs = append(errs, errors.New("QDRANT_URL is required in production (in-memory vectors are for development only)"))
 	}
 	if c.IsProduction() && c.MailDriver == "devsink" {
 		errs = append(errs, errors.New("MAIL_DRIVER=devsink is not allowed in production"))

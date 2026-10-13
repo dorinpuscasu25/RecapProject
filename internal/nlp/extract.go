@@ -165,7 +165,7 @@ type Fact struct {
 
 var (
 	percentRe  = regexp.MustCompile(`(?i)(\d+(?:[.,]\d+)?)\s?(%|la sut[ăa]|процент[а-я]*)`)
-	moneyRe    = regexp.MustCompile(`(?i)(\d[\d\s.,]*\d|\d)\s?(mii|mln|milioane|miliarde|млн|млрд|тыс\.?)?\s?(lei|mdl|euro|eur|€|dolari|usd|\$|леев|лей|евро|долларов)`)
+	moneyRe    = regexp.MustCompile(`(?i)(\d[\d\s.,]*\d|\d)\s?(mii|mln|milioane|miliarde|млн|млрд|тыс\.?)?\s?(lei|mdl|euro|eur|€|dolari|usd|\$|леев|лея|лей|евро|долларов)`)
 	numberRe   = regexp.MustCompile(`(?i)(\d[\d\s.,]*\d|\d+)\s?(kwh|mwh|mw|km|tone|tonne|тонн|кв?т[·.]?ч|locuri|persoane|человек|de)?`)
 	dateROre   = regexp.MustCompile(`(?i)\b(\d{1,2})\s(ianuarie|februarie|martie|aprilie|mai|iunie|iulie|august|septembrie|octombrie|noiembrie|decembrie)(?:\s(\d{4}))?`)
 	dateRUre   = regexp.MustCompile(`(?i)\b(\d{1,2})\s(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)(?:\s(\d{4}))?`)
@@ -205,7 +205,7 @@ func scale(word string) float64 {
 
 func currency(c string) string {
 	switch strings.ToLower(c) {
-	case "lei", "mdl", "леев", "лей":
+	case "lei", "mdl", "леев", "лея", "лей":
 		return "mdl"
 	case "euro", "eur", "€", "евро":
 		return "eur"
@@ -288,7 +288,7 @@ func Facts(text string) []Fact {
 	}
 	for _, m := range decisionRe.FindAllStringSubmatchIndex(text, -1) {
 		if mark(m[2], m[3]) {
-			verb := Stem(Key(text[m[2]:m[3]]))
+			verb := DecisionClass(text[m[2]:m[3]])
 			out = append(out, Fact{Type: "decision", Key: "decision:" + verb, Text: text[m[2]:m[3]], Start: m[2], End: m[3], Value: map[string]any{}})
 		}
 	}
@@ -397,4 +397,37 @@ func IsCapitalized(s string) bool {
 		return unicode.IsUpper(r)
 	}
 	return false
+}
+
+// EntityKey is the canonical normalized key for entity identity (cross-script, stemmed).
+func EntityKey(s string) string { return stemKey(s) }
+
+// decisionClasses maps decision verbs in RO/RU to language-independent action classes so that
+// the same decision reported in different languages yields the same fact key.
+var decisionClasses = []struct {
+	class string
+	stems []string
+}{
+	{"approve", []string{"aprob", "adopt", "утверд", "принял", "принят"}},
+	{"decide", []string{"decis", "решил"}},
+	{"increase", []string{"major", "повыс"}},
+	{"decrease", []string{"redus", "сниз"}},
+	{"vote", []string{"votat", "голосов"}},
+	{"sign", []string{"semnat", "promulg", "подпис"}},
+	{"cancel", []string{"anulat", "отмен"}},
+	{"appoint", []string{"numit", "назнач"}},
+	{"dismiss", []string{"demis"}},
+}
+
+// DecisionClass returns the canonical action class of a decision verb phrase.
+func DecisionClass(phrase string) string {
+	l := strings.ToLower(phrase)
+	for _, c := range decisionClasses {
+		for _, st := range c.stems {
+			if strings.Contains(l, st) {
+				return c.class
+			}
+		}
+	}
+	return Stem(Key(phrase))
 }

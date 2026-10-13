@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYNTHETIC FIXTURE — not real news -->
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<channel>
+<title>Știri Exemplu</title>
+<language>ro</language>
+<item>
+<title>ANRE a aprobat majorarea tarifului la energia electrică cu 15%</title>
+<link>https://stiri-exemplu.md/economie/anre-majorare-tarif-energie-electrica?utm_source=rss</link>
+<guid>stiri-exemplu-1001</guid>
+<pubDate>Mon, 12 Oct 2026 09:00:00 +0300</pubDate>
+<dc:creator>Redacția Știri Exemplu</dc:creator>
+<category>Economie</category>
+<content:encoded><![CDATA[<p>Agenția Națională pentru Reglementare în Energetică (ANRE) a aprobat luni majorarea tarifului la energia electrică pentru consumatorii casnici cu 15%.</p>
+<p>Potrivit deciziei, tariful va crește de la 3,05 lei la 3,51 lei pentru un kilowatt-oră, începând cu 1 noiembrie 2026.</p>
+<p>Decizia a fost luată în ședința consiliului de administrație al ANRE, la solicitarea furnizorului Energocom.</p>
+<p>Directorul ANRE a declarat că majorarea este determinată de creșterea prețurilor de achiziție pe piața regională.</p>
+<p>Opoziția a criticat decizia și a cerut Guvernului compensații pentru familiile vulnerabile din Chișinău și din întreaga țară.</p>]]></content:encoded>
+</item>
+<item>
+<title>ANRE a aprobat reducerea tarifului la gazele naturale cu 8%</title>
+<link>https://stiri-exemplu.md/economie/anre-reducere-tarif-gaze</link>
+<guid>stiri-exemplu-1002</guid>
+<pubDate>Mon, 12 Oct 2026 14:00:00 +0300</pubDate>
+<dc:creator>Redacția Știri Exemplu</dc:creator>
+<category>Economie</category>
+<content:encoded><![CDATA[<p>Agenția Națională pentru Reglementare în Energetică a aprobat reducerea tarifului la gazele naturale cu 8%, până la 14,20 lei pentru un metru cub, începând cu 1 decembrie 2026.</p>
+<p>Moldovagaz a solicitat ajustarea tarifului după scăderea prețului de import al gazelor naturale.</p>
+<p>Reducerea se aplică tuturor consumatorilor casnici racordați la rețeaua de distribuție, a precizat agenția.</p>]]></content:encoded>
+</item>
+</channel>
+</rss>
