@@ -237,9 +237,21 @@ func (s *Service) HandlePoll(ctx context.Context, d *bus.Delivery) error {
 			return s.markEndpointSuccess(ctx, tx, e.ID, res)
 		})
 	}
-	feed, perr := ParseFeed(res.Body, res.FinalURL)
+	var feed *Feed
+	var perr error
+	if e.EndpointType == "html_list" {
+		var sels []string
+		if e.ExtractionProfileID != nil {
+			if p, err := s.sources.GetProfile(ctx, *e.ExtractionProfileID); err == nil {
+				sels = p.LinkSelectors
+			}
+		}
+		feed, perr = ParseListPage(res.Body, res.FinalURL, sels, e.AllowedHosts)
+	} else {
+		feed, perr = ParseFeed(res.Body, res.FinalURL)
+	}
 	if perr != nil {
-		return s.failRun(ctx, d, e, msg, res, bus.PermanentErr(fmt.Errorf("parse feed: %w", perr)), start)
+		return s.failRun(ctx, d, e, msg, res, bus.PermanentErr(fmt.Errorf("parse %s: %w", e.EndpointType, perr)), start)
 	}
 	limit := e.MaxItemsPerPoll
 	if msg.MaxItems > 0 && msg.MaxItems < limit {
@@ -295,13 +307,25 @@ func (s *Service) HandlePoll(ctx context.Context, d *bus.Delivery) error {
 			discovered++
 		}
 		eb, _ := json.Marshal(capErrors(errs))
-		if _, err := tx.Exec(ctx, `UPDATE source_crawl_runs SET status='succeeded', http_status=$2, discovered_count=$3, rejected_count=$4,
+		status := "succeeded"
+		if rejected > 0 {
+			status = "partial"
+		}
+		if _, err := tx.Exec(ctx, `UPDATE source_crawl_runs SET status=$8, http_status=$2, discovered_count=$3, rejected_count=$4,
 			duplicate_count=$5, errors=$6, completed_at=now(), duration_ms=$7 WHERE id=$1`,
-			msg.CrawlRunID, res.Status, discovered, rejected, unchanged, eb, int(s.now().Sub(start).Milliseconds())); err != nil {
+			msg.CrawlRunID, res.Status, discovered, rejected, unchanged, eb, int(s.now().Sub(start).Milliseconds()), status); err != nil {
 			return err
 		}
 		if err := s.markEndpointSuccess(ctx, tx, e.ID, res); err != nil {
 			return err
+		}
+		// Every item rejected (e.g. hosts not allowed, invalid URLs): the source is reachable but
+		// produces nothing usable, which is a configuration problem worth surfacing.
+		if rejected > 0 && discovered == 0 && unchanged == 0 {
+			if _, err := tx.Exec(ctx, `UPDATE source_endpoints SET health_state='degraded', last_error=$2 WHERE id=$1`,
+				e.ID, fmt.Sprintf("all %d items rejected (see crawl run errors)", rejected)); err != nil {
+				return err
+			}
 		}
 		return refreshHealth(ctx, tx, e.ID, res.Status)
 	})

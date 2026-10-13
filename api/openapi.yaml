@@ -3393,6 +3393,10 @@ components:
         id:
           format: uuid
           type: string
+        link_selectors:
+          items:
+            type: string
+          type: array
         name:
           type: string
         pagination:
@@ -3416,6 +3420,7 @@ components:
         - canonical_selectors
         - author_selectors
         - cleanup_selectors
+        - link_selectors
         - pagination
         - fixtures
         - created_at
@@ -3648,6 +3653,10 @@ components:
         fixtures:
           items:
             $ref: '#/components/schemas/sources.ProfileFixture'
+          type: array
+        link_selectors:
+          items:
+            type: string
           type: array
         name:
           type: string

@@ -205,6 +205,11 @@ func lowerAll(in []string) []string {
 func (s *Service) validateEndpoint(e *Endpoint) error {
 	var v apperr.Validator
 	v.Check(endpointTypes[e.EndpointType], "endpoint_type", "invalid", "Invalid endpoint type.")
+	v.Check(e.EndpointType != "official_api", "endpoint_type", "unsupported",
+		"official_api endpoints need a source-specific adapter that is not available in this build; use json_feed, rss, atom, sitemap or html_list.")
+	if e.EndpointType == "html_list" {
+		v.Check(e.FetchArticlePages, "fetch_article_pages", "required", "html_list endpoints discover links on a list page and must fetch article pages.")
+	}
 	if e.EndpointType == "fixture" {
 		// Fixture endpoints read deterministic local files (fixture://name.xml); never network.
 		v.Check(strings.HasPrefix(e.EntryURL, "fixture://") && !strings.Contains(e.EntryURL, ".."), "entry_url", "invalid", "Fixture URLs look like fixture://feeds/name.xml")
@@ -223,7 +228,8 @@ func (s *Service) validateEndpoint(e *Endpoint) error {
 	v.Check(e.ConcurrencyLimit >= 1 && e.ConcurrencyLimit <= 16, "concurrency_limit", "out_of_range", "1..16")
 	v.Check(e.TimeoutSeconds >= 1 && e.TimeoutSeconds <= 120, "timeout_seconds", "out_of_range", "1..120")
 	v.Check(e.MaxItemsPerPoll >= 1 && e.MaxItemsPerPoll <= 1000, "max_items_per_poll", "out_of_range", "1..1000")
-	v.Check(e.FetchMode == "http" || e.FetchMode == "headless", "fetch_mode", "invalid", "fetch_mode must be http or headless.")
+	v.Check(e.FetchMode == "http", "fetch_mode", "unsupported", "Only fetch_mode http is available; headless rendering is not part of this build.")
+	v.Check(!e.JSRequired, "js_required", "unsupported", "Sources that require JavaScript rendering are not supported in this build.")
 	v.Check(e.RetryPolicy.MaxAttempts >= 1 && e.RetryPolicy.MaxAttempts <= 10, "retry_policy.max_attempts", "out_of_range", "1..10")
 	for _, l := range e.Languages {
 		v.Check(langRe.MatchString(l), "languages", "invalid", "Languages must be ISO 639-1 codes.")
@@ -581,6 +587,7 @@ type ExtractionProfile struct {
 	CanonicalSelectors []string         `json:"canonical_selectors"`
 	AuthorSelectors    []string         `json:"author_selectors"`
 	CleanupSelectors   []string         `json:"cleanup_selectors"`
+	LinkSelectors      []string         `json:"link_selectors"` // html_list endpoints: anchors to article pages
 	Pagination         map[string]any   `json:"pagination"`
 	Fixtures           []ProfileFixture `json:"fixtures"`
 	CreatedAt          time.Time        `json:"created_at"`
@@ -589,13 +596,13 @@ type ExtractionProfile struct {
 }
 
 const profCols = `id, name, title_selectors, content_selectors, date_selectors, canonical_selectors, author_selectors, cleanup_selectors,
-	pagination, fixtures, created_at, updated_at, version`
+	link_selectors, pagination, fixtures, created_at, updated_at, version`
 
 func scanProfile(row pgx.Row) (*ExtractionProfile, error) {
 	var p ExtractionProfile
 	var pag, fix []byte
 	if err := row.Scan(&p.ID, &p.Name, &p.TitleSelectors, &p.ContentSelectors, &p.DateSelectors, &p.CanonicalSelectors, &p.AuthorSelectors,
-		&p.CleanupSelectors, &pag, &fix, &p.CreatedAt, &p.UpdatedAt, &p.Version); err != nil {
+		&p.CleanupSelectors, &p.LinkSelectors, &pag, &fix, &p.CreatedAt, &p.UpdatedAt, &p.Version); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal(pag, &p.Pagination)
@@ -614,6 +621,7 @@ type ProfileInput struct {
 	CanonicalSelectors []string         `json:"canonical_selectors,omitempty"`
 	AuthorSelectors    []string         `json:"author_selectors,omitempty"`
 	CleanupSelectors   []string         `json:"cleanup_selectors,omitempty"`
+	LinkSelectors      []string         `json:"link_selectors,omitempty"`
 	Pagination         map[string]any   `json:"pagination,omitempty"`
 	Fixtures           []ProfileFixture `json:"fixtures,omitempty"`
 	Version            *int             `json:"version,omitempty"`
@@ -644,6 +652,9 @@ func (p *ExtractionProfile) apply(in ProfileInput) {
 	if in.CleanupSelectors != nil {
 		p.CleanupSelectors = in.CleanupSelectors
 	}
+	if in.LinkSelectors != nil {
+		p.LinkSelectors = in.LinkSelectors
+	}
 	if in.Pagination != nil {
 		p.Pagination = in.Pagination
 	}
@@ -656,7 +667,7 @@ func (p *ExtractionProfile) validate(check SelectorValidator) error {
 	var v apperr.Validator
 	v.Check(p.Name != "" && len(p.Name) <= 100, "name", "invalid", "Name is required.")
 	groups := map[string][]string{"title_selectors": p.TitleSelectors, "content_selectors": p.ContentSelectors, "date_selectors": p.DateSelectors,
-		"canonical_selectors": p.CanonicalSelectors, "author_selectors": p.AuthorSelectors, "cleanup_selectors": p.CleanupSelectors}
+		"canonical_selectors": p.CanonicalSelectors, "author_selectors": p.AuthorSelectors, "cleanup_selectors": p.CleanupSelectors, "link_selectors": p.LinkSelectors}
 	for field, sels := range groups {
 		v.Check(len(sels) <= 20, field, "too_many", "At most 20 selectors.")
 		for _, sel := range sels {
@@ -680,7 +691,8 @@ func (p *ExtractionProfile) validate(check SelectorValidator) error {
 
 func (s *Service) CreateProfile(ctx context.Context, in ProfileInput, check SelectorValidator) (*ExtractionProfile, error) {
 	p := &ExtractionProfile{ID: ids.New(), TitleSelectors: []string{}, ContentSelectors: []string{}, DateSelectors: []string{},
-		CanonicalSelectors: []string{}, AuthorSelectors: []string{}, CleanupSelectors: []string{}, Pagination: map[string]any{}, Fixtures: []ProfileFixture{}}
+		CanonicalSelectors: []string{}, AuthorSelectors: []string{}, CleanupSelectors: []string{}, LinkSelectors: []string{}, Pagination: map[string]any{},
+		Fixtures: []ProfileFixture{}}
 	p.apply(in)
 	if err := p.validate(check); err != nil {
 		return nil, err
@@ -689,8 +701,9 @@ func (s *Service) CreateProfile(ctx context.Context, in ProfileInput, check Sele
 		pag, _ := json.Marshal(p.Pagination)
 		fix, _ := json.Marshal(p.Fixtures)
 		_, err := tx.Exec(ctx, `INSERT INTO extraction_profiles (id, name, title_selectors, content_selectors, date_selectors, canonical_selectors,
-			author_selectors, cleanup_selectors, pagination, fixtures, created_by, updated_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)`,
-			p.ID, p.Name, p.TitleSelectors, p.ContentSelectors, p.DateSelectors, p.CanonicalSelectors, p.AuthorSelectors, p.CleanupSelectors, pag, fix, actor(ctx))
+			author_selectors, cleanup_selectors, link_selectors, pagination, fixtures, created_by, updated_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12)`,
+			p.ID, p.Name, p.TitleSelectors, p.ContentSelectors, p.DateSelectors, p.CanonicalSelectors, p.AuthorSelectors, p.CleanupSelectors, p.LinkSelectors,
+			pag, fix, actor(ctx))
 		if db.IsUniqueViolation(err) {
 			return apperr.Conflict("profile_name_taken", "A profile with this name already exists.")
 		}
@@ -751,8 +764,8 @@ func (s *Service) UpdateProfile(ctx context.Context, id uuid.UUID, in ProfileInp
 		fix, _ := json.Marshal(cur.Fixtures)
 		_, err = tx.Exec(ctx, `UPDATE extraction_profiles SET name=$2, title_selectors=$3, content_selectors=$4, date_selectors=$5,
 			canonical_selectors=$6, author_selectors=$7, cleanup_selectors=$8, pagination=$9, fixtures=$10, updated_by=$11, updated_at=now(),
-			version=version+1 WHERE id=$1`, id, cur.Name, cur.TitleSelectors, cur.ContentSelectors, cur.DateSelectors, cur.CanonicalSelectors,
-			cur.AuthorSelectors, cur.CleanupSelectors, pag, fix, actor(ctx))
+			link_selectors=$12, version=version+1 WHERE id=$1`, id, cur.Name, cur.TitleSelectors, cur.ContentSelectors, cur.DateSelectors, cur.CanonicalSelectors,
+			cur.AuthorSelectors, cur.CleanupSelectors, pag, fix, actor(ctx), cur.LinkSelectors)
 		if db.IsUniqueViolation(err) {
 			return apperr.Conflict("profile_name_taken", "A profile with this name already exists.")
 		}

@@ -123,7 +123,22 @@ func (s *Service) TestSource(ctx context.Context, in TestSourceInput) (*TestSour
 		out.DurationMS = time.Since(start).Milliseconds()
 		return out, nil
 	}
-	feed, perr := ParseFeed(res.Body, res.FinalURL)
+	var feed *Feed
+	var perr error
+	if in.EndpointType == "html_list" {
+		var sels []string
+		if prof != nil {
+			sels = prof.LinkSelectors
+		}
+		feed, perr = ParseListPage(res.Body, res.FinalURL, sels, nil)
+		if perr != nil {
+			out.Errors = append(out.Errors, "list_page: "+perr.Error())
+			out.DurationMS = time.Since(start).Milliseconds()
+			return out, nil
+		}
+	} else {
+		feed, perr = ParseFeed(res.Body, res.FinalURL)
+	}
 	if perr != nil {
 		// Not a feed: treat as a single article page preview.
 		ex, eerr := ExtractHTML(res.Body, res.FinalURL, prof)
