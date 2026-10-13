@@ -1,0 +1,168 @@
+# Architecture Decision Log
+
+Each entry: context → decision → consequences. Newest entries are appended at the bottom.
+Status values: `accepted`, `superseded`, `deferred`.
+
+---
+
+## ADR-001 — Go monorepo with a small number of binaries (accepted)
+
+**Context.** The product has 11 logical modules. Microservice proliferation would add operational
+cost without benefit at this stage.
+
+**Decision.** One Go module (`github.com/dorinpuscasu25/recapproject`) with domain packages under
+`internal/` and four binaries:
+
+| Binary | Role |
+|---|---|
+| `cmd/api` | Public + admin REST API (stateless, horizontally scalable) |
+| `cmd/worker` | Outbox relay, message consumers (enrichment, events, fact-check, indexing, mail, notifications), scheduler, durable job runner |
+| `cmd/migrate` | Applies embedded SQL migrations (goose) |
+| `cmd/newsctl` | Operator CLI: bootstrap admin, seed, fixture ingestion, replay, reindex, offline evaluation |
+
+Module boundaries are enforced by package layout and by the rule that modules only talk to each
+other synchronously through narrow Go interfaces, and asynchronously through versioned messages.
+
+**Consequences.** Any module can later be split into its own binary because it already
+communicates via interfaces/messages.
+
+## ADR-002 — chi router instead of Gin (accepted)
+
+chi (`github.com/go-chi/chi/v5`) is `net/http`-native: handlers are plain `http.Handler`s,
+middleware is standard, and there is no custom context type leaking into domain code. Gin's
+performance advantage is irrelevant for this workload (I/O bound on DB/AI calls).
+
+## ADR-003 — pgx with hand-written typed repositories, goose migrations (accepted)
+
+**Decision.** `pgx/v5` pool, explicit parameterized SQL in per-module `store.go` files returning
+typed structs. Migrations are plain SQL embedded via `embed.FS` and applied by goose.
+
+**Why not sqlc now.** sqlc adds a code-generation step that must be kept in sync with migrations.
+The typed-repository pattern gives equivalent type safety at the call site with all SQL visible
+and reviewed in one place per module. Moving a store to sqlc later is mechanical (queries are
+already isolated). Recorded as a possible follow-up.
+
+## ADR-004 — No pgvector; Qdrant for vectors, OpenSearch for lexical (accepted)
+
+PostgreSQL is the system of record and stores **no vectors**. Embedding vectors live only in Qdrant
+(one collection per `{doc_type}_{embedding_model_slug}_{dim}` with an alias per doc type).
+OpenSearch holds lexical projections. Both are rebuildable from Postgres (`newsctl reindex`).
+
+**Graceful degradation.** When OpenSearch is not configured/reachable, the lexical retriever falls
+back to PostgreSQL full-text search (`tsvector` generated column, `simple` config, unaccented) and
+responses carry `"degraded": ["lexical:postgres_fts"]`. When Qdrant is unavailable the semantic
+retriever is skipped and the response states `"degraded": ["semantic:unavailable"]`. This is a
+transparent fallback, not a fake result.
+
+## ADR-005 — Kafka via franz-go; Postgres outbox; pluggable bus for local runs (accepted)
+
+**Decision.** All domain state changes that other modules care about are written to
+`outbox_events` in the same transaction as the state change. The outbox relay publishes to Kafka
+(`franz-go`, idempotent producer, key = aggregate id). Consumers record
+`(consumer_group, message_id)` in `consumer_dedupe` inside the same transaction as their side
+effects → effectively-once domain effects.
+
+`BUS_DRIVER=kafka|postgres`. In `postgres` mode the relay dispatches the outbox rows directly to
+the same in-process consumers (same dedupe, retry and DLQ semantics, rows locked with
+`FOR UPDATE SKIP LOCKED`). This lets the full pipeline run and be tested without a Kafka broker;
+it is a real durable queue, not a mock. Production intent is `kafka`.
+
+**Topology.** A few versioned topics grouped by aggregate rather than one per event type:
+see `docs/event-processing.md`. Every message has an envelope with `type` (e.g.
+`article.enriched.v1`), so the 17 logical contracts from the brief map onto 9 physical topics plus
+DLQs.
+
+## ADR-006 — Temporal deferred; Postgres-backed durable job runner (accepted, revisit)
+
+**Context.** Temporal is recommended for multi-step workflows (briefings, reprocessing,
+review-dependent flows). Running a Temporal cluster is a significant dependency for a first
+version, and none of the current workflows need long-lived timers or signals that a job table
+cannot express.
+
+**Decision.** `internal/jobs` implements a durable job runner on PostgreSQL (`jobs` table, leases
+with `FOR UPDATE SKIP LOCKED`, attempts, exponential backoff, `queued → processing → succeeded |
+failed | quarantined`). Workflows are written as idempotent step functions behind a
+`jobs.Handler` interface so they can be ported 1:1 to Temporal activities. Kafka is still used for
+domain events; jobs are not a Kafka replacement.
+
+**Consequences.** One less moving part locally. A Temporal adapter is listed in `HANDOFF.md`
+as remaining work; nothing in domain code depends on the job runner implementation.
+
+## ADR-007 — First-party identity with Ed25519 JWT access tokens + opaque rotating refresh tokens (accepted)
+
+- Passwords: Argon2id (`m=64 MiB, t=3, p=2, salt=16B, key=32B`; configurable; tests use
+  lower cost). Encoded in PHC string format so parameters can evolve.
+- Email codes: 6 digits from `crypto/rand` (rejection sampling), stored as
+  `HMAC-SHA256(server_secret, purpose|challenge_id|code)`, compared in constant time.
+- Access token: JWT signed with **EdDSA (Ed25519)** only; the parser is configured with
+  `WithValidMethods(["EdDSA"])` to prevent algorithm confusion; `kid` header selects the key from
+  a key ring for rotation; validates `iss`, `aud`, `exp`, `iat`, `sub`, `jti`. 15 min default.
+- Refresh token: 32 random bytes, base64url, stored as SHA-256 hash; belongs to a token family
+  (`auth_refresh_token_families`) bound to a session (`auth_sessions`). Each refresh rotates; a
+  reused (already-rotated) token revokes the whole family and session.
+- Flow choice: **`verify-email` activates the account and issues a session** (same as a login) to
+  avoid a second password entry right after registration.
+- Service accounts authenticate with hashed API keys (`service_accounts` table, `X-API-Key`),
+  never with the human login flow. See `docs/architecture.md` §Security.
+- The identity boundary (`identity.TokenIssuer`, `identity.Authenticator`) is OIDC-compatible: a
+  future OIDC federation adapter can mint the same principal type.
+
+## ADR-008 — Provider-agnostic AI gateway with a deterministic heuristic provider (accepted)
+
+**Decision.** `internal/ai` defines task-level operations (`GenerateStructured`, `GenerateText`,
+`EmbedTexts`, `Rerank`, `TextToSpeech`). Routing (`ai_task_routes`) chooses primary + fallback
+models per task from the database. Adapters: OpenAI-compatible (also covers vLLM, Ollama,
+OpenRouter, Azure-style gateways), Anthropic Messages API, Google Gemini `generateContent`, and a
+`heuristic` provider.
+
+The `heuristic` provider is a **real rule-based baseline**, not a mock: language detection by
+script/stop-words, taxonomy classification using DB-managed hints/aliases/examples, sentence-level
+claim extraction with attribution patterns, and a deterministic hashed character n-gram embedding
+(`local-hash-v1`, Cyrillic transliterated to Latin first so RO/RU share features). Its outputs are
+marked `provider=heuristic` in `ai_executions` and provenance fields, so they are never presented
+as LLM output. It is the default for local development and is what the evaluation harness uses as
+a baseline.
+
+A separate `fake` provider exists **only in test code** to simulate outages and malformed JSON.
+
+## ADR-009 — Structured output validation (accepted)
+
+Every structured task declares a JSON Schema (stored in `prompt_versions.output_schema`) and a Go
+type. Output is validated by (1) JSON decoding with `DisallowUnknownFields`, (2) a minimal JSON
+Schema validator (`internal/ai/schema`) for required fields/enums/types, (3) task-specific semantic
+validation (offset bounds, citation ids exist in the provided context, enum membership against the
+live taxonomy). Failures retry up to `route.max_attempts`, then the work item is quarantined.
+
+## ADR-010 — Fact-check verdicts are deterministic-rule gated (accepted)
+
+Models may *propose* evidence relations and verdicts, but the final automated verdict is computed by
+deterministic sufficiency rules (`internal/factcheck/policy.go`): independent source clusters
+(syndication collapsed), primary/official evidence weight, recency, contradiction balance.
+Default without sufficient evidence is `unverified`. `refuted`, `misleading_context` and
+`disputed` in high-risk contexts are stored as `proposed` and hidden from readers (shown as
+`unverified` with `review_status=pending_review`) until an editor approves.
+
+## ADR-011 — Object storage via minio-go with a local filesystem driver (accepted)
+
+`STORAGE_DRIVER=s3|filesystem`. Raw snapshots and audio are never publicly addressable; audio is
+streamed through an authenticated endpoint or served via short-lived presigned URLs (S3 mode).
+
+## ADR-012 — Telemetry (accepted)
+
+`log/slog` JSON logs with request/correlation ids; OpenTelemetry tracing with OTLP/HTTP exporter
+when `OTEL_EXPORTER_OTLP_ENDPOINT` is set (no-op otherwise); Prometheus metrics at `/metrics` on a
+separate internal listener. AI observability via a `ai.Observer` interface with a Langfuse
+adapter when configured.
+
+## ADR-013 — Analytics optional (accepted)
+
+Product analytics events go through `analytics.Sink` with `noop`, `postgres` (bounded
+`analytics_events` table for local) and `clickhouse` (HTTP `JSONEachRow`) drivers. Analytics
+failures never fail API or ingestion paths (fire-and-forget with bounded buffer).
+
+## ADR-014 — Error model (accepted)
+
+All errors are `application/problem+json` (RFC 9457) with a stable machine-readable `code`,
+`request_id`, and optional `errors[]` field-level details. Status mapping: 400 malformed,
+401 unauthenticated, 403 forbidden, 404, 409 version conflict / duplicate, 422 domain validation,
+429 rate-limited (with `Retry-After`), 503 dependency unavailable / provider unavailable.

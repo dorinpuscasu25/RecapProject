@@ -1,0 +1,10 @@
+/var/
+/bin/
+*.test
+*.out
+coverage.*
+.env
+.env.local
+/tmp/
+.idea/
+.vscode/
