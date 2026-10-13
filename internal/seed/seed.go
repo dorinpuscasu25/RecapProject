@@ -63,7 +63,9 @@ var DefaultPolicies = map[string]struct {
 		"weights":                 map[string]any{"relevance": 0.35, "recency": 0.25, "importance": 0.2, "novelty": 0.15, "source_diversity": 0.05},
 		"recency_half_life_hours": 18, "disputed_penalty": 0.1, "max_per_category_ratio": 0.5}},
 	"notifications": {"Notification anti-spam and breaking-news policy", map[string]any{
-		"daily_budget": 6, "breaking_min_importance": 0.8, "breaking_min_sources": 2, "breaking_require_no_dispute": true}},
+		"daily_budget": 6, "update_min_severity": "major", "update_cooldown_minutes": 60, "digest_lookback_hours": 24, "min_importance_default": 0.3,
+		"breaking_min_importance": 0.8, "breaking_min_sources": 2, "breaking_require_no_dispute": true, "breaking_max_age_minutes": 180,
+		"breaking_min_confidence": 0.6}},
 	"chat":      {"Chat retention and context bounds", map[string]any{"retention_days": 30, "max_history_turns": 6, "max_context_docs": 8}},
 	"search":    {"Hybrid retrieval", map[string]any{"rrf_k": 60, "lexical_k": 50, "semantic_k": 50, "rerank_top": 20}},
 	"briefings": {"Briefing composition", map[string]any{"events_per_minute": 1.2, "max_events": 12, "words_per_minute": 150}},

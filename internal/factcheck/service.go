@@ -77,7 +77,7 @@ func (s *Service) HandleVerification(ctx context.Context, d *bus.Delivery) error
 	if done, err := d.AlreadyProcessed(ctx); err != nil || done {
 		return err
 	}
-	var claimIDs []uuid.UUID
+	var claimIDs, forced []uuid.UUID
 	reason := ""
 	switch d.Message.Type {
 	case bus.ClaimVerificationRequested:
@@ -107,11 +107,23 @@ func (s *Service) HandleVerification(ctx context.Context, d *bus.Delivery) error
 			return err
 		}
 		reason = "evidence_withdrawn"
+	case bus.ArticleEnriched:
+		var msg struct {
+			ArticleID uuid.UUID `json:"article_id"`
+		}
+		if err := d.Message.Decode(&msg); err != nil {
+			return bus.PermanentErr(err)
+		}
+		ids, err := s.claimsToRecheck(ctx, msg.ArticleID)
+		if err != nil {
+			return err
+		}
+		claimIDs, reason, forced = ids, "new_primary_evidence", []uuid.UUID{msg.ArticleID}
 	default:
 		return nil
 	}
 	for _, id := range uniqueIDs(claimIDs) {
-		if err := s.Verify(ctx, id, reason); err != nil {
+		if err := s.verify(ctx, id, reason, forced...); err != nil {
 			if errors.Is(err, ai.ErrDeferred) {
 				return err // retry later; never fabricate a verdict
 			}
@@ -122,6 +134,54 @@ func (s *Service) HandleVerification(ctx context.Context, d *bus.Delivery) error
 		}
 	}
 	return d.Once(ctx, func(pgx.Tx) error { return nil })
+}
+
+// claimsToRecheck returns open claims that a newly enriched primary-source article (government,
+// public institution or fact-checker) may confirm or contradict: related claims (lexical match on
+// the article's title and lead) whose reader-visible verdict is still unverified and automatic,
+// seen within the evidence window, and not extracted from this article.
+func (s *Service) claimsToRecheck(ctx context.Context, articleID uuid.UUID) ([]uuid.UUID, error) {
+	var pubType, title string
+	var lead *string
+	err := s.db.Pool.QueryRow(ctx, `SELECT p.publisher_type, a.title, coalesce(a.description, left(a.body_text, 600)) FROM articles a
+		JOIN publishers p ON p.id=a.publisher_id WHERE a.id=$1 AND a.status='enriched'`, articleID).Scan(&pubType, &title, &lead)
+	if db.IsNoRows(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if pubType != "government" && pubType != "public_institution" && pubType != "fact_checker" {
+		return nil, nil
+	}
+	p, _ := s.policy(ctx)
+	text := title
+	if lead != nil {
+		text += " " + *lead
+	}
+	from := time.Now().Add(-time.Duration(p.EvidenceWindowDays) * 24 * time.Hour)
+	hits, err := s.search.Lexical().Search(ctx, search.LexicalQuery{Text: text, DocTypes: []string{"claim"}, Limit: 20})
+	if err != nil {
+		s.log.Warn("claim recheck: lexical search unavailable", "error", err)
+		return nil, nil
+	}
+	var cands []uuid.UUID
+	for _, h := range hits {
+		if id, err := uuid.Parse(h.ID); err == nil {
+			cands = append(cands, id)
+		}
+	}
+	if len(cands) == 0 {
+		return nil, nil
+	}
+	rows, err := s.db.Pool.Query(ctx, `SELECT c.id FROM claims c LEFT JOIN claim_verdicts v ON v.id=c.current_verdict_id
+		WHERE c.id = ANY($1) AND c.checkability='checkable' AND c.status <> 'withdrawn' AND c.last_seen_at >= $2
+		  AND (v.id IS NULL OR (v.verdict='unverified' AND v.review_status='automatic_preliminary'))
+		  AND NOT EXISTS (SELECT 1 FROM claim_occurrences o WHERE o.claim_id=c.id AND o.article_id=$3)`, cands, from, articleID)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
 }
 
 func uniqueIDs(in []uuid.UUID) []uuid.UUID {
@@ -153,7 +213,7 @@ type evidenceCand struct {
 // retrieveEvidence finds candidate evidence documents: independently published articles (not the
 // ones where the claim occurs, not from the same publishers) via lexical + semantic retrieval
 // and via the claim's events.
-func (s *Service) retrieveEvidence(ctx context.Context, c *claimRow, p Policy) ([]*evidenceCand, error) {
+func (s *Service) retrieveEvidence(ctx context.Context, c *claimRow, p Policy, forced ...uuid.UUID) ([]*evidenceCand, error) {
 	rows, err := s.db.Pool.Query(ctx, `SELECT DISTINCT o.article_id, a.publisher_id FROM claim_occurrences o JOIN articles a ON a.id=o.article_id WHERE o.claim_id=$1`, c.ID)
 	if err != nil {
 		return nil, err
@@ -196,6 +256,10 @@ func (s *Service) retrieveEvidence(ctx context.Context, c *claimRow, p Policy) (
 				}
 			}
 		}
+	}
+	// Articles explicitly supplied by the trigger (new primary-source evidence).
+	for _, id := range forced {
+		addC(id, "trigger", 1)
 	}
 	// Articles covering the same events.
 	rows, err = s.db.Pool.Query(ctx, `SELECT l.article_id FROM event_claims ec JOIN event_article_links l ON l.event_id=ec.event_id AND l.unlinked_at IS NULL
@@ -275,6 +339,10 @@ func sourceKind(pubType string) string {
 
 // Verify re-evaluates one claim and records a new verdict version if anything changed.
 func (s *Service) Verify(ctx context.Context, claimID uuid.UUID, reason string) error {
+	return s.verify(ctx, claimID, reason)
+}
+
+func (s *Service) verify(ctx context.Context, claimID uuid.UUID, reason string, forced ...uuid.UUID) error {
 	p, _ := s.policy(ctx)
 	c, err := s.loadClaim(ctx, s.db.Pool, claimID)
 	if err != nil {
@@ -287,7 +355,7 @@ func (s *Service) Verify(ctx context.Context, claimID uuid.UUID, reason string) 
 	var cands []*evidenceCand
 	modelRef := "rules"
 	if c.Checkability == "checkable" {
-		cands, err = s.retrieveEvidence(ctx, c, p)
+		cands, err = s.retrieveEvidence(ctx, c, p, forced...)
 		if err != nil {
 			return err
 		}

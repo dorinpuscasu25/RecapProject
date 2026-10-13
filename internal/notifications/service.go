@@ -50,20 +50,36 @@ func (s *Service) SetProvider(name string, p PushProvider) { s.providers[name] =
 // SetClock overrides the clock (tests).
 func (s *Service) SetClock(now func() time.Time) { s.now = now }
 
-// Config is the "notifications" editorial policy.
+// Config is the "notifications" editorial policy (admin-editable; see docs/operations-local.md).
 type Config struct {
-	MaxPerDay            int     `json:"max_per_day"`
+	MaxPerDay            int     `json:"daily_budget"`
 	UpdateMinSeverity    string  `json:"update_min_severity"` // minor | major | critical
 	DigestLookbackHours  int     `json:"digest_lookback_hours"`
 	UpdateCooldownMinute int     `json:"update_cooldown_minutes"`
 	MinImportanceDefault float64 `json:"min_importance_default"`
+	// Breaking alerts (also gated by the breaking_notifications feature flag).
+	BreakingMinImportance    float64 `json:"breaking_min_importance"`
+	BreakingMinSources       int     `json:"breaking_min_sources"`
+	BreakingRequireNoDispute bool    `json:"breaking_require_no_dispute"`
+	BreakingMaxAgeMinutes    int     `json:"breaking_max_age_minutes"`
+	BreakingMinConfidence    float64 `json:"breaking_min_confidence"`
+}
+
+// DefaultConfig is used for keys missing from the stored policy.
+func DefaultConfig() Config {
+	return Config{MaxPerDay: 6, UpdateMinSeverity: "major", DigestLookbackHours: 24, UpdateCooldownMinute: 60, MinImportanceDefault: 0.3,
+		BreakingMinImportance: 0.8, BreakingMinSources: 2, BreakingRequireNoDispute: true, BreakingMaxAgeMinutes: 180,
+		BreakingMinConfidence: 0.6}
 }
 
 func (s *Service) cfg(ctx context.Context) Config {
-	c := Config{MaxPerDay: 6, UpdateMinSeverity: "major", DigestLookbackHours: 24, UpdateCooldownMinute: 60, MinImportanceDefault: 0.3}
+	c := DefaultConfig()
 	_, _ = s.pol.Get(ctx, "notifications", &c)
 	if c.MaxPerDay <= 0 {
 		c.MaxPerDay = 6
+	}
+	if c.BreakingMinSources < 1 {
+		c.BreakingMinSources = 1
 	}
 	return c
 }
@@ -552,16 +568,42 @@ func truncate(s string, n int) string {
 
 var severityRank = map[string]int{"minor": 1, "major": 2, "critical": 3}
 
-// HandleEventUpdated notifies followers of a material, approved update at or above the policy severity.
-// Updates still awaiting editorial approval are never pushed (they are not public yet).
-func (s *Service) HandleEventUpdated(ctx context.Context, del *bus.Delivery) error {
+// HandleEventChanged reacts to event.created, event.updated and claim.verdict.updated:
+//   - followers of an event get material, approved updates at or above the policy severity;
+//   - users following the event's categories may get a breaking alert, only when the event passes
+//     the confidence/freshness/no-dispute policy (re-evaluated as verdicts arrive; sent once).
+func (s *Service) HandleEventChanged(ctx context.Context, del *bus.Delivery) error {
+	if del.Message.Type == bus.ClaimVerdictUpdated {
+		var v struct {
+			ClaimID uuid.UUID `json:"claim_id"`
+		}
+		if err := del.Message.Decode(&v); err != nil {
+			return bus.PermanentErr(err)
+		}
+		rows, err := s.db.Pool.Query(ctx, `SELECT DISTINCT event_id FROM claim_occurrences WHERE claim_id=$1 AND event_id IS NOT NULL`, v.ClaimID)
+		if err != nil {
+			return err
+		}
+		evs, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+		if err != nil {
+			return err
+		}
+		return del.Once(ctx, func(tx pgx.Tx) error {
+			for _, ev := range evs {
+				if err := s.maybeBreaking(ctx, tx, ev); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
 	var ch events.Changed
 	if err := del.Message.Decode(&ch); err != nil {
 		return bus.PermanentErr(err)
 	}
 	c := s.cfg(ctx)
-	if !ch.Material || severityRank[ch.Severity] < severityRank[c.UpdateMinSeverity] {
-		return del.Once(ctx, func(pgx.Tx) error { return nil })
+	if !ch.Material || (ch.Kind != "created" && severityRank[ch.Severity] < severityRank[c.UpdateMinSeverity]) || ch.Kind == "created" {
+		return del.Once(ctx, func(tx pgx.Tx) error { return s.maybeBreaking(ctx, tx, ch.EventID) })
 	}
 	var pending bool
 	err := s.db.Pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM event_updates WHERE event_id=$1 AND event_version=$2 AND requires_approval AND approved_at IS NULL)`,
@@ -602,9 +644,126 @@ func (s *Service) HandleEventUpdated(ctx context.Context, del *bus.Delivery) err
 				return err
 			}
 		}
-		return nil
+		return s.maybeBreaking(ctx, tx, ch.EventID)
 	})
 }
+
+// BreakingEligibility explains whether an event may be pushed as breaking news right now.
+func (s *Service) BreakingEligibility(ctx context.Context, q db.Querier, eventID uuid.UUID) (bool, string, error) {
+	c := s.cfg(ctx)
+	var status string
+	var importance, confidence float32
+	var sourcesN int
+	var earliest *time.Time
+	err := q.QueryRow(ctx, `SELECT status, importance, confidence, source_count, earliest_published_at FROM events WHERE id=$1`, eventID).
+		Scan(&status, &importance, &confidence, &sourcesN, &earliest)
+	if db.IsNoRows(err) {
+		return false, "event_not_found", nil
+	}
+	if err != nil {
+		return false, "", err
+	}
+	switch {
+	case status != "active":
+		return false, "event_not_active", nil
+	case float64(importance) < c.BreakingMinImportance:
+		return false, "below_importance", nil
+	case sourcesN < c.BreakingMinSources:
+		return false, "insufficient_sources", nil
+	case float64(confidence) < c.BreakingMinConfidence:
+		return false, "low_confidence", nil
+	case earliest == nil || s.now().Sub(*earliest) > time.Duration(c.BreakingMaxAgeMinutes)*time.Minute:
+		return false, "not_fresh", nil
+	}
+	var pendingUpdate, unassessed, disputed, hasCheckable, corroborated bool
+	if err := q.QueryRow(ctx, `SELECT
+		EXISTS (SELECT 1 FROM event_updates WHERE event_id=$1 AND requires_approval AND approved_at IS NULL),
+		EXISTS (SELECT 1 FROM claim_occurrences o JOIN claims c ON c.id=o.claim_id
+		        WHERE o.event_id=$1 AND c.checkability='checkable' AND c.current_verdict_id IS NULL),
+		EXISTS (SELECT 1 FROM claim_occurrences o JOIN claims c ON c.id=o.claim_id JOIN claim_verdicts v ON v.id=c.current_verdict_id
+		        WHERE o.event_id=$1 AND (v.verdict IN ('refuted','disputed','misleading_context') OR v.proposed_verdict IN ('refuted','disputed','misleading_context')
+		              OR v.review_status='pending_review')),
+		EXISTS (SELECT 1 FROM claim_occurrences o JOIN claims c ON c.id=o.claim_id WHERE o.event_id=$1 AND c.checkability='checkable'),
+		EXISTS (SELECT 1 FROM claim_occurrences o JOIN claims c ON c.id=o.claim_id JOIN claim_verdicts v ON v.id=c.current_verdict_id
+		        WHERE o.event_id=$1 AND v.verdict IN ('supported','partially_supported'))`, eventID).
+		Scan(&pendingUpdate, &unassessed, &disputed, &hasCheckable, &corroborated); err != nil {
+		return false, "", err
+	}
+	switch {
+	case pendingUpdate:
+		return false, "update_pending_review", nil
+	case c.BreakingRequireNoDispute && unassessed:
+		return false, "claims_not_yet_assessed", nil
+	case c.BreakingRequireNoDispute && disputed:
+		return false, "disputed_or_under_review", nil
+	case hasCheckable && !corroborated:
+		// Checkable claims exist but none is corroborated: an unconfirmed report, not breaking news.
+		return false, "no_corroborated_claims", nil
+	}
+	return true, "", nil
+}
+
+// maybeBreaking sends a once-per-event breaking alert to users following the event's categories.
+func (s *Service) maybeBreaking(ctx context.Context, tx pgx.Tx, eventID uuid.UUID) error {
+	if !s.pol.FlagEnabled(ctx, "breaking_notifications", "") {
+		return nil
+	}
+	ok, _, err := s.BreakingEligibility(ctx, tx, eventID)
+	if err != nil || !ok {
+		return err
+	}
+	c := s.cfg(ctx)
+	rows, err := tx.Query(ctx, `SELECT DISTINCT i.user_id, coalesce(p.summary_language,'ro') FROM user_interests i
+		JOIN event_categories ec ON ec.event_id=$1 AND ec.category_id::text=i.target_key
+		JOIN users u ON u.id=i.user_id AND u.status='active'
+		LEFT JOIN user_preferences p ON p.user_id=i.user_id
+		WHERE i.interest_type='category' AND i.mode='follow'
+		  AND NOT EXISTS (SELECT 1 FROM user_interests m JOIN event_categories ec2 ON ec2.event_id=$1 AND ec2.category_id::text=m.target_key
+		                  WHERE m.user_id=i.user_id AND m.interest_type='category' AND m.mode='mute')
+		  AND NOT EXISTS (SELECT 1 FROM followed_events f WHERE f.user_id=i.user_id AND f.event_id=$1)`, eventID)
+	if err != nil {
+		return err
+	}
+	type rcpt struct {
+		id   uuid.UUID
+		lang string
+	}
+	rs, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (rcpt, error) {
+		var x rcpt
+		return x, r.Scan(&x.id, &x.lang)
+	})
+	if err != nil {
+		return err
+	}
+	now := s.now()
+	for _, r := range rs {
+		if !s.pol.FlagEnabled(ctx, "breaking_notifications", r.id.String()) {
+			continue
+		}
+		lang := r.lang
+		if _, ok := breakingTitle[lang]; !ok {
+			lang = "ro"
+		}
+		p := Payload{Title: breakingTitle[lang], Language: lang, EventIDs: []uuid.UUID{eventID},
+			Data: map[string]string{"type": "breaking", "event_id": eventID.String()}}
+		if e, err := s.events.Get(ctx, eventID, lang); err == nil {
+			p.Body = truncate(e.Title, 160)
+		}
+		skip, err := s.updateSkipReason(ctx, tx, r.id, eventID, now, c)
+		if err != nil {
+			return err
+		}
+		if skip == "cooldown" {
+			skip = ""
+		}
+		if _, err := s.enqueue(ctx, tx, r.id, nil, "breaking:"+eventID.String(), "breaking", p, skip); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var breakingTitle = map[string]string{"ro": "Știre importantă", "ru": "Важная новость", "en": "Breaking"}
 
 func (s *Service) updateSkipReason(ctx context.Context, tx pgx.Tx, user, event uuid.UUID, now time.Time, c Config) (string, error) {
 	// Quiet hours: honour the user's schedules' quiet windows.
@@ -714,7 +873,7 @@ func (s *Service) HandleRequested(ctx context.Context, del *bus.Delivery) error 
 		return finish("failed", "", "token_decrypt_failed", "")
 	}
 	res, err := prov.Send(ctx, PushMessage{Token: string(tok), Title: p.Title, Body: p.Body, Data: p.Data,
-		CollapseKey: collapseKey(p), HighPriority: false})
+		CollapseKey: collapseKey(p), HighPriority: p.Data["type"] == "breaking"})
 	var te *TransientError
 	switch {
 	case errors.Is(err, ErrNotConfigured):

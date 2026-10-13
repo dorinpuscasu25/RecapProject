@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/dorinpuscasu25/recapproject/internal/ai"
 	"github.com/dorinpuscasu25/recapproject/internal/notifications"
 	"github.com/dorinpuscasu25/recapproject/internal/testutil"
@@ -319,3 +321,78 @@ func TestScheduledNotifications(t *testing.T) {
 	e.MustStatus(e.Do("DELETE", "/v1/devices/"+dev.Str("id"), user, nil), 204)
 	e.MustStatus(e.Do("DELETE", "/v1/notifications/schedules/morning", user, nil), 204)
 }
+
+// Breaking alerts are policy-gated: sent once for a corroborated, undisputed event; an uncorroborated
+// single-portal rumour is withheld even with relaxed source/confidence thresholds.
+func TestBreakingAlertsArePolicyGated(t *testing.T) {
+	e := testutil.NewEnv(t)
+	admin := e.Admin("breaking-admin@example.com", "super_admin")
+	user, _, _ := e.RegisterVerified("breaking-user@example.com")
+	fp := &fakePush{invalid: map[string]bool{}}
+	e.App.NotificationService().SetProvider("apns", fp)
+	e.MustStatus(e.Do("POST", "/v1/devices", user, map[string]any{"platform": "ios", "token": "apns-breaking-token-0123456789"}), 201)
+	var energy, economy string
+	_ = e.App.DB.Pool.QueryRow(e.Ctx, `SELECT (SELECT id::text FROM categories WHERE slug='energy'), (SELECT id::text FROM categories WHERE slug='economy')`).Scan(&energy, &economy)
+	e.MustStatus(e.Do("PUT", "/v1/users/me/categories", user, map[string]any{"category_ids": []string{energy, economy}}), 200)
+
+	// Without the feature flag nothing is pushed.
+	var version float64
+	for _, it := range e.MustStatus(e.Do("GET", "/v1/admin/policies", admin, nil), 200).Items() {
+		if m := it.(map[string]any); m["key"] == "notifications" {
+			version = m["version"].(float64)
+		}
+	}
+	e.MustStatus(e.Do("PUT", "/v1/admin/policies/notifications", admin, map[string]any{"version": version, "value": map[string]any{
+		"daily_budget": 10, "breaking_min_importance": 0, "breaking_min_sources": 1, "breaking_require_no_dispute": true, "breaking_max_age_minutes": 100000, "breaking_min_confidence": 0}}), 200)
+	e.MustStatus(e.Do("PUT", "/v1/admin/feature-flags/breaking_notifications", admin, map[string]any{"enabled": true, "rollout_percent": 100}), 204)
+
+	_, off := e.SetupSource(admin, testutil.FixtureSource{Name: "ANRE exemplu", Domain: "anre-exemplu.md", Type: "government", Feed: "anre-exemplu.xml", FetchPages: true, Languages: []string{"ro"}})
+	_, ro := e.SetupSource(admin, testutil.FixtureSource{Name: "Știri Exemplu", Domain: "stiri-exemplu.md", Feed: "stiri-exemplu.xml", Languages: []string{"ro"}})
+	_, rapid := e.SetupSource(admin, testutil.FixtureSource{Name: "Portal Rapid", Domain: "rapid-portal.md", Feed: "rapid-portal.xml", Languages: []string{"ro"}})
+	e.Crawl(admin, off)
+	e.Crawl(admin, ro)
+	e.Crawl(admin, rapid)
+
+	tariff := eventOf(t, e, "Comunicat: ANRE a aprobat noile tarife la energia electrică")
+	pension := ""
+	_ = e.App.DB.Pool.QueryRow(e.Ctx, `SELECT o.event_id::text FROM claim_occurrences o JOIN claims c ON c.id=o.claim_id
+		WHERE c.canonical_text ILIKE '%reducerea pensiilor cu 30%' AND o.event_id IS NOT NULL LIMIT 1`).Scan(&pension)
+	if pension == "" {
+		t.Fatal("pension rumour event not found")
+	}
+	breaking := map[string]int{}
+	for _, d := range deliveries(t, e, user) {
+		if d["kind"] == "breaking" {
+			for _, id := range d["payload"].(map[string]any)["event_ids"].([]any) {
+				breaking[id.(string)]++
+			}
+		}
+	}
+	if breaking[tariff] != 1 {
+		t.Fatalf("expected exactly one breaking alert for the sourced tariff decision, got %v", breaking)
+	}
+	if breaking[pension] != 0 {
+		t.Fatalf("a disputed/under-review rumour must not be pushed as breaking: %v", breaking)
+	}
+	ok, reason, err := e.App.NotificationService().BreakingEligibility(e.Ctx, e.App.DB.Pool, uuidMust(pension))
+	if err != nil || ok || reason != "no_corroborated_claims" {
+		t.Fatalf("pension eligibility: ok=%v reason=%q err=%v", ok, reason, err)
+	}
+	// The ministry's denial arrives: the claim is now contested and held for review.
+	_, mf := e.SetupSource(admin, testutil.FixtureSource{Name: "Ministerul Finanțelor exemplu", Domain: "mf-exemplu.md", Type: "government", Feed: "mf-exemplu.xml", FetchPages: true, Languages: []string{"ro"}})
+	e.Crawl(admin, mf)
+	if ok, reason, _ := e.App.NotificationService().BreakingEligibility(e.Ctx, e.App.DB.Pool, uuidMust(pension)); ok || reason != "disputed_or_under_review" {
+		t.Fatalf("after the denial: ok=%v reason=%q", ok, reason)
+	}
+	sentHigh := false
+	for _, m := range fp.sent {
+		if m.Data["type"] == "breaking" && m.HighPriority {
+			sentHigh = true
+		}
+	}
+	if !sentHigh {
+		t.Fatalf("breaking push not delivered with high priority: %+v", fp.sent)
+	}
+}
+
+func uuidMust(s string) uuid.UUID { return uuid.MustParse(s) }

@@ -69,7 +69,7 @@ func pushProviders(a *App) map[string]notifications.PushProvider {
 
 func (e *experienceExt) consumers() []*bus.Consumer {
 	return []*bus.Consumer{
-		{Name: "notification-event-updates", Types: []string{bus.EventUpdated}, Handle: e.nt.HandleEventUpdated, Concurrency: 1, MaxAttempts: 8},
+		{Name: "notification-events", Types: []string{bus.EventCreated, bus.EventUpdated, bus.ClaimVerdictUpdated}, Handle: e.nt.HandleEventChanged, Concurrency: 1, MaxAttempts: 8},
 		{Name: "notification-sender", Types: []string{bus.NotificationRequested}, Handle: e.nt.HandleRequested, Concurrency: 4, Timeout: time.Minute, MaxAttempts: 6},
 	}
 }

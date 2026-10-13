@@ -26,7 +26,7 @@ func init() {
 }
 
 func (f *factcheckExt) consumers() []*bus.Consumer {
-	return []*bus.Consumer{{Name: "fact-checker", Types: []string{bus.ClaimVerificationRequested, bus.ContentDeleted},
+	return []*bus.Consumer{{Name: "fact-checker", Types: []string{bus.ClaimVerificationRequested, bus.ContentDeleted, bus.ArticleEnriched},
 		Handle: f.svc.HandleVerification, Concurrency: 2, Timeout: 5 * time.Minute, MaxAttempts: 8}}
 }
 

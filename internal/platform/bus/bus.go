@@ -25,7 +25,6 @@ import (
 const (
 	SourcePollRequested        = "source.poll.requested.v1"
 	ArticleDiscovered          = "article.discovered.v1"
-	ArticleFetched             = "article.fetched.v1"
 	ArticleExtracted           = "article.extracted.v1"
 	ArticleEnrichmentRequested = "article.enrichment.requested.v1"
 	ArticleEnriched            = "article.enriched.v1"
