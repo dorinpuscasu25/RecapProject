@@ -1,0 +1,15 @@
+{
+  "version": "1",
+  "description": "SYNTHETIC claim-extraction cases. 'checkable' lists substrings of quotes that must be extracted as checkable; 'not_checkable' lists spans (opinions, predictions, rhetoric) that must not be.",
+  "gates": {"checkable_recall": 0.6, "non_checkable_rejection": 0.8, "span_fidelity": 1.0},
+  "cases": [
+    {"id": "clm-tariff", "language": "ro", "title": "Tarif nou", "text": "ANRE a aprobat tariful de 3,51 lei pentru un kilowatt-oră. Tariful va intra în vigoare la 1 noiembrie 2026. Mulți consumatori consideră că decizia este nedreaptă.", "checkable": ["3,51 lei"], "not_checkable": ["nedreaptă"]},
+    {"id": "clm-pension", "language": "ro", "title": "Pensii", "text": "Ministrul Finanțelor a declarat că pensiile vor fi indexate cu 6% din aprilie. Credem că economia va crește spectaculos în următorii zece ani.", "checkable": ["6%"], "not_checkable": ["spectaculos"]},
+    {"id": "clm-ru-budget", "language": "ru", "title": "Бюджет", "text": "Парламент утвердил бюджет с дефицитом в 4,5% ВВП. Это, возможно, лучший бюджет в истории.", "checkable": ["4,5%"], "not_checkable": ["лучший бюджет"]},
+    {"id": "clm-opinion-only", "language": "ro", "title": "Editorial", "text": "Este o rușine cum arată drumurile noastre. Cine mai poate suporta asemenea nepăsare?", "checkable": [], "not_checkable": ["rușine", "nepăsare"]},
+    {"id": "clm-stat", "language": "ro", "title": "Export", "text": "Potrivit Biroului Național de Statistică, exporturile au crescut cu 12% în primele nouă luni ale anului, până la 2,1 miliarde de dolari.", "checkable": ["12%"], "not_checkable": []},
+    {"id": "clm-prediction", "language": "ro", "title": "Prognoză", "text": "Analiștii cred că prețurile ar putea scădea dacă iarna va fi blândă.", "checkable": [], "not_checkable": ["ar putea scădea"]},
+    {"id": "clm-ru-decision", "language": "ru", "title": "Решение", "text": "Правительство приняло решение повысить минимальную зарплату до 6300 леев с 1 января.", "checkable": ["6300"], "not_checkable": []},
+    {"id": "clm-quote", "language": "ro", "title": "Declarație", "text": "„Am alocat 200 de milioane de lei pentru reparația școlilor”, a declarat ministrul Educației. Opoziția susține că suma reală este mult mai mică.", "checkable": ["200 de milioane"], "not_checkable": []}
+  ]
+}

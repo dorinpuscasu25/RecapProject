@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "description": "SYNTHETIC classification cases (ro/ru/en) labelled by hand against the seeded starter taxonomy. Expected sets are compared ancestor-closed.",
+  "gates": {"f1": 0.6, "recall": 0.6},
+  "cases": [
+    {"id": "cls-ro-electricity", "language": "ro", "title": "ANRE a aprobat un nou tarif la energia electrică", "text": "Agenția Națională pentru Reglementare în Energetică a aprobat tariful de 3,51 lei pentru un kilowatt-oră de energie electrică pentru consumatorii casnici.", "expected": ["electricity-prices"]},
+    {"id": "cls-ru-electricity", "language": "ru", "title": "НАРЭ утвердило новый тариф на электроэнергию", "text": "Национальное агентство по регулированию в энергетике утвердило тариф на электроэнергию в размере 3,51 лея за киловатт-час.", "expected": ["electricity-prices"]},
+    {"id": "cls-ro-gas", "language": "ro", "title": "Moldovagaz anunță livrări suplimentare de gaze naturale", "text": "Compania Moldovagaz a anunțat că livrările de gaze naturale vor crește în timpul iernii, potrivit unui comunicat.", "expected": ["energy"]},
+    {"id": "cls-ro-parliament", "language": "ro", "title": "Parlamentul a adoptat legea bugetului", "text": "Deputații au votat în lectură finală legea bugetului de stat pentru anul viitor, iar opoziția a criticat cheltuielile.", "expected": ["politics", "economy"]},
+    {"id": "cls-ru-court", "language": "ru", "title": "Суд вынес приговор по делу о коррупции", "text": "Судья вынес обвинительный приговор бывшему чиновнику по делу о коррупции, сообщила прокуратура.", "expected": ["justice"]},
+    {"id": "cls-ro-school", "language": "ro", "title": "Rezultatele examenului de bacalaureat au fost publicate", "text": "Ministerul Educației a publicat rezultatele bacalaureatului; elevii pot depune contestații timp de două zile.", "expected": ["education"]},
+    {"id": "cls-ro-hospital", "language": "ro", "title": "Spitalul raional primește aparatură nouă", "text": "Medicii de la spitalul raional vor folosi aparatură nouă pentru diagnosticarea pacienților, finanțată de CNAM.", "expected": ["health"]},
+    {"id": "cls-ro-startup", "language": "ro", "title": "Un startup din Chișinău lansează o aplicație de inteligență artificială", "text": "Compania IT a prezentat un software bazat pe inteligență artificială pentru traducerea documentelor.", "expected": ["technology", "chisinau-local"]},
+    {"id": "cls-ru-harvest", "language": "ru", "title": "Фермеры на юге начали сбор винограда", "text": "Фермеры южных районов начали сбор урожая винограда; ожидается рост экспорта.", "expected": ["agriculture"]},
+    {"id": "cls-ro-football", "language": "ro", "title": "Echipa națională a câștigat meciul amical", "text": "Echipa națională de fotbal a câștigat cu 2-1 meciul amical disputat pe stadionul din capitală.", "expected": ["sport"]},
+    {"id": "cls-ro-eu", "language": "ro", "title": "Negocierile de aderare la Uniunea Europeană avansează", "text": "Guvernul a anunțat deschiderea unui nou capitol în negocierile de aderare la Uniunea Europeană, la Bruxelles.", "expected": ["eu-integration", "politics"]},
+    {"id": "cls-ro-trolleybus", "language": "ro", "title": "Primăria Chișinău introduce troleibuze noi", "text": "Primăria municipiului Chișinău a anunțat că zece troleibuze noi vor intra pe traseele din sectorul Botanica.", "expected": ["chisinau-local"]},
+    {"id": "cls-en-theatre", "language": "en", "title": "National theatre festival opens in Chișinău", "text": "The annual theatre festival opened with performances from five countries and a music programme.", "expected": ["culture", "chisinau-local"]},
+    {"id": "cls-ro-border", "language": "ro", "title": "Poliția de Frontieră a reținut un grup de contrabandiști", "text": "Polițiștii de frontieră au reținut un grup care încerca să treacă ilegal frontiera cu mărfuri nedeclarate.", "expected": ["security"]}
+  ]
+}

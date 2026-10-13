@@ -494,9 +494,17 @@ func heurAnswer(in *AnswerInput) (*AnswerOutput, error) {
 			}
 		}
 		if len(own) >= 3 {
+			// Measured against the cited documents (title + text), not only the chosen sentences.
+			cited := map[string]bool{}
+			for _, c := range cites {
+				cited[c] = true
+			}
 			got := map[string]bool{}
-			for _, p := range parts {
-				for _, t := range nlp.KeyTokens(p) {
+			for _, d := range in.Context {
+				if !cited[d.Ref] {
+					continue
+				}
+				for _, t := range nlp.KeyTokens(d.Title + " " + d.Text) {
 					if own[t] {
 						got[t] = true
 					}

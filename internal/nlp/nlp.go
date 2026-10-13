@@ -116,6 +116,10 @@ func Stem(t string) string {
 	if len(t) <= 4 {
 		return t
 	}
+	// English plural/3rd-person -s (exports → export); "-ss" (process) is kept.
+	if strings.HasSuffix(t, "s") && !strings.HasSuffix(t, "ss") {
+		t = t[:len(t)-1]
+	}
 	for _, suf := range []string{"urilor", "ului", "elor", "ilor", "ului", "ova", "evoi", "ami", "ami", "ach", "iah", "ogo", "omu",
 		"ele", "ile", "ul", "le", "lui", "ii", "ei", "ia", "ie", "a", "e", "i", "u", "o", "y"} {
 		if strings.HasSuffix(t, suf) && len(t)-len(suf) >= 4 {

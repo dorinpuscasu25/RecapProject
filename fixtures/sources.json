@@ -1,0 +1,203 @@
+{
+ "description": "SYNTHETIC local sources for development. Loaded by `newsctl ingest-fixtures`.",
+ "sources": [
+  {
+   "publisher": {
+    "name": "Știri Exemplu",
+    "canonical_domain": "stiri-exemplu.md",
+    "publisher_type": "newsroom",
+    "primary_languages": [
+     "ro"
+    ]
+   },
+   "permission": {
+    "legal_basis": "synthetic local fixture (no real publisher)",
+    "permission_status": "granted",
+    "allow_crawl": true,
+    "allow_store_full_text": true,
+    "allow_summarize": true,
+    "allow_embed": true,
+    "allow_snippets": true,
+    "allow_audio": true,
+    "robots_review_status": "compliant",
+    "terms_review_status": "compliant",
+    "attribution_text": "Sursa: Știri Exemplu"
+   },
+   "endpoint": {
+    "name": "Știri Exemplu feed",
+    "endpoint_type": "fixture",
+    "entry_url": "fixture://feeds/stiri-exemplu.xml",
+    "fetch_article_pages": false,
+    "languages": [
+     "ro"
+    ],
+    "poll_interval_seconds": 900
+   }
+  },
+  {
+   "publisher": {
+    "name": "Новости Пример",
+    "canonical_domain": "novosti-primer.md",
+    "publisher_type": "newsroom",
+    "primary_languages": [
+     "ru"
+    ]
+   },
+   "permission": {
+    "legal_basis": "synthetic local fixture (no real publisher)",
+    "permission_status": "granted",
+    "allow_crawl": true,
+    "allow_store_full_text": true,
+    "allow_summarize": true,
+    "allow_embed": true,
+    "allow_snippets": true,
+    "allow_audio": true,
+    "robots_review_status": "compliant",
+    "terms_review_status": "compliant",
+    "attribution_text": "Sursa: Новости Пример"
+   },
+   "endpoint": {
+    "name": "Новости Пример feed",
+    "endpoint_type": "fixture",
+    "entry_url": "fixture://feeds/novosti-primer.xml",
+    "fetch_article_pages": false,
+    "languages": [
+     "ru"
+    ],
+    "poll_interval_seconds": 900
+   }
+  },
+  {
+   "publisher": {
+    "name": "ANRE exemplu",
+    "canonical_domain": "anre-exemplu.md",
+    "publisher_type": "government",
+    "primary_languages": [
+     "ro"
+    ]
+   },
+   "permission": {
+    "legal_basis": "synthetic local fixture (no real publisher)",
+    "permission_status": "granted",
+    "allow_crawl": true,
+    "allow_store_full_text": true,
+    "allow_summarize": true,
+    "allow_embed": true,
+    "allow_snippets": true,
+    "allow_audio": true,
+    "robots_review_status": "compliant",
+    "terms_review_status": "compliant",
+    "attribution_text": "Sursa: ANRE exemplu"
+   },
+   "endpoint": {
+    "name": "ANRE exemplu feed",
+    "endpoint_type": "fixture",
+    "entry_url": "fixture://feeds/anre-exemplu.xml",
+    "fetch_article_pages": true,
+    "languages": [
+     "ro"
+    ],
+    "poll_interval_seconds": 900
+   }
+  },
+  {
+   "publisher": {
+    "name": "Ministerul Finanțelor exemplu",
+    "canonical_domain": "mf-exemplu.md",
+    "publisher_type": "government",
+    "primary_languages": [
+     "ro"
+    ]
+   },
+   "permission": {
+    "legal_basis": "synthetic local fixture (no real publisher)",
+    "permission_status": "granted",
+    "allow_crawl": true,
+    "allow_store_full_text": true,
+    "allow_summarize": true,
+    "allow_embed": true,
+    "allow_snippets": true,
+    "allow_audio": true,
+    "robots_review_status": "compliant",
+    "terms_review_status": "compliant",
+    "attribution_text": "Sursa: Ministerul Finanțelor exemplu"
+   },
+   "endpoint": {
+    "name": "Ministerul Finanțelor exemplu feed",
+    "endpoint_type": "fixture",
+    "entry_url": "fixture://feeds/mf-exemplu.xml",
+    "fetch_article_pages": true,
+    "languages": [
+     "ro"
+    ],
+    "poll_interval_seconds": 900
+   }
+  },
+  {
+   "publisher": {
+    "name": "Știri Diverse Exemplu",
+    "canonical_domain": "diverse-exemplu.md",
+    "publisher_type": "newsroom",
+    "primary_languages": [
+     "ro"
+    ]
+   },
+   "permission": {
+    "legal_basis": "synthetic local fixture (no real publisher)",
+    "permission_status": "granted",
+    "allow_crawl": true,
+    "allow_store_full_text": true,
+    "allow_summarize": true,
+    "allow_embed": true,
+    "allow_snippets": true,
+    "allow_audio": true,
+    "robots_review_status": "compliant",
+    "terms_review_status": "compliant",
+    "attribution_text": "Sursa: Știri Diverse Exemplu"
+   },
+   "endpoint": {
+    "name": "Știri Diverse Exemplu feed",
+    "endpoint_type": "fixture",
+    "entry_url": "fixture://feeds/diverse-ro.xml",
+    "fetch_article_pages": false,
+    "languages": [
+     "ro"
+    ],
+    "poll_interval_seconds": 900
+   }
+  },
+  {
+   "publisher": {
+    "name": "Rapid Portal",
+    "canonical_domain": "rapid-portal.md",
+    "publisher_type": "other",
+    "primary_languages": [
+     "ro"
+    ]
+   },
+   "permission": {
+    "legal_basis": "synthetic local fixture (no real publisher)",
+    "permission_status": "granted",
+    "allow_crawl": true,
+    "allow_store_full_text": true,
+    "allow_summarize": true,
+    "allow_embed": true,
+    "allow_snippets": true,
+    "allow_audio": true,
+    "robots_review_status": "compliant",
+    "terms_review_status": "compliant",
+    "attribution_text": "Sursa: Rapid Portal"
+   },
+   "endpoint": {
+    "name": "Rapid Portal feed",
+    "endpoint_type": "fixture",
+    "entry_url": "fixture://feeds/rapid-portal.xml",
+    "fetch_article_pages": false,
+    "languages": [
+     "ro"
+    ],
+    "poll_interval_seconds": 900
+   }
+  }
+ ]
+}

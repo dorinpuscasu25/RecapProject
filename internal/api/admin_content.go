@@ -8,9 +8,11 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/dorinpuscasu25/recapproject/internal/ai"
+	"github.com/dorinpuscasu25/recapproject/internal/eval"
 	"github.com/dorinpuscasu25/recapproject/internal/events"
 	"github.com/dorinpuscasu25/recapproject/internal/identity"
 	"github.com/dorinpuscasu25/recapproject/internal/jobs"
+	"github.com/dorinpuscasu25/recapproject/internal/platform/apperr"
 	"github.com/dorinpuscasu25/recapproject/internal/platform/httpx"
 	"github.com/dorinpuscasu25/recapproject/internal/search"
 )
@@ -203,6 +205,26 @@ func (a *API) adminContent(r chi.Router) {
 				return 0, nil, err
 			}
 			return 204, nil, a.Events.ApproveUpdate(r.Context(), id, uid)
+		}))
+	})
+
+	// ---- Evaluation results (ai:evaluate); runs are started with `newsctl eval` ----
+	r.Group(func(r chi.Router) {
+		r.Use(identity.Require("ai:evaluate"))
+		r.Get("/admin/ai/evals", h(func(r *http.Request) (int, any, error) {
+			l, err := eval.Runs(r.Context(), a.DB, r.URL.Query().Get("suite"), httpx.Limit(r, 50, 200))
+			return 200, list(l), err
+		}))
+		r.Get("/admin/ai/evals/{id}", h(func(r *http.Request) (int, any, error) {
+			id, err := pathID(r, "id", "eval_run")
+			if err != nil {
+				return 0, nil, err
+			}
+			res, err := eval.Results(r.Context(), a.DB, id)
+			if err == nil && len(res) == 0 {
+				return 0, nil, apperr.NotFound("eval_run_not_found", "Evaluation run not found.")
+			}
+			return 200, map[string]any{"run_id": id, "results": res}, err
 		}))
 	})
 
