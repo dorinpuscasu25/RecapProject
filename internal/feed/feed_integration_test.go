@@ -124,4 +124,14 @@ func TestPersonalizedFeedAndCatchUp(t *testing.T) {
 		}
 	}
 	e.MustStatus(e.Do("GET", "/v1/feed?cursor=garbage", bob, nil), 400)
+
+	// Usage analytics: pseudonymous subject, route pattern only (no ids or query text).
+	e.App.Analytics.Close()
+	var n int
+	var leaked bool
+	_ = e.App.DB.Pool.QueryRow(e.Ctx, `SELECT count(*) FILTER (WHERE properties->>'route'='/v1/feed'),
+		bool_or(properties::text LIKE '%'||$1||'%' OR subject_hash IN (SELECT id::text FROM users)) FROM analytics_events WHERE event_name='api_request'`, techEvent).Scan(&n, &leaked)
+	if n == 0 || leaked {
+		t.Fatalf("analytics: feed requests=%d leaked identifiers=%v", n, leaked)
+	}
 }

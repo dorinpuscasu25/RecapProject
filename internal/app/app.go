@@ -14,6 +14,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/dorinpuscasu25/recapproject/internal/ai"
+	"github.com/dorinpuscasu25/recapproject/internal/analytics"
 	"github.com/dorinpuscasu25/recapproject/internal/api"
 	"github.com/dorinpuscasu25/recapproject/internal/identity"
 	"github.com/dorinpuscasu25/recapproject/internal/ingest"
@@ -44,6 +46,9 @@ type App struct {
 	Taxonomy *taxonomy.Service
 	Sources  *sources.Service
 	Ingest   *ingest.Service
+
+	Analytics *analytics.Recorder
+	langfuse  *ai.Langfuse
 
 	mods *modules
 	api  *api.API
@@ -118,17 +123,38 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts Options
 	fetcher.FixtureAnchor = cfg.FixtureTimeAnchor
 	a.Ingest = ingest.NewService(d, a.Sources, fetcher, a.Store, log)
 
+	var sink analytics.Sink = analytics.Noop{}
+	switch cfg.AnalyticsDriver {
+	case "postgres":
+		sink = analytics.Postgres{DB: d}
+	case "clickhouse":
+		if cfg.ClickHouseURL == "" {
+			log.Warn("ANALYTICS_DRIVER=clickhouse without CLICKHOUSE_URL; analytics disabled")
+		} else {
+			sink = analytics.ClickHouse{URL: cfg.ClickHouseURL}
+		}
+	}
+	a.Analytics = analytics.NewRecorder(sink, cfg.Auth.CodeHMACSecret, log)
+
 	a.mods, err = newModules(ctx, a)
 	if err != nil {
 		return nil, err
 	}
+	if cfg.LangfuseHost != "" && cfg.LangfusePublic != "" && cfg.LangfuseSecret != "" {
+		a.langfuse = ai.NewLangfuse(cfg.LangfuseHost, cfg.LangfusePublic, cfg.LangfuseSecret, log)
+		a.mods.AI.SetObserver(a.langfuse)
+	}
 	a.api = &api.API{Cfg: cfg, DB: d, Log: log, Identity: a.Identity, Taxonomy: a.Taxonomy, Sources: a.Sources, Ingest: a.Ingest,
-		Policy: a.mods.Policy, AI: a.mods.AI, Search: a.mods.Search, Enrich: a.mods.Enrich, Events: a.mods.Events}
+		Policy: a.mods.Policy, AI: a.mods.AI, Search: a.mods.Search, Enrich: a.mods.Enrich, Events: a.mods.Events, Analytics: a.Analytics}
 	a.mods.wireAPI(a.api)
 	return a, nil
 }
 
 func (a *App) Close() {
+	a.Analytics.Close()
+	if a.langfuse != nil {
+		a.langfuse.Close()
+	}
 	if a.Redis != nil {
 		_ = a.Redis.Close()
 	}
