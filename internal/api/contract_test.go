@@ -39,6 +39,9 @@ func TestRoutesMatchContractAndPermissions(t *testing.T) {
 	e := testutil.NewEnv(t)
 	mounted := map[string]bool{}
 	_ = chi.Walk(e.App.Handler().(chi.Routes), func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		if route == "/" || strings.HasPrefix(route, "/console") { // developer console (static files), not API
+			return nil
+		}
 		mounted[method+" "+strings.TrimSuffix(route, "/")] = true
 		return nil
 	})

@@ -37,6 +37,7 @@ const usage = `newsctl — operator CLI
   newsctl seed [-categories=true] [-entities=true]     idempotent reference data (policies, AI registry, taxonomy, gazetteer)
   newsctl bootstrap-admin -email ADDRESS                 grant super_admin to an existing verified account
   newsctl create-admin -email A -password P -phone +373… create (or promote) a verified super_admin (fresh installs)
+  newsctl create-user -email A -password P -phone +373…  create a verified ordinary account (demo/testing; DEMO_* env)
   newsctl ingest-fixtures [-manifest fixtures/sources.json] [-drain=true]
                                                          register the synthetic fixture sources and crawl them
   newsctl verify-sources -legal-basis "…" [-manifest config/sources/moldova.json] [-max-items 5] [-only name]
@@ -150,6 +151,30 @@ func run(ctx context.Context, cmd string, args []string, log *slog.Logger) (int,
 			return 1, err
 		}
 		fmt.Printf("super_admin ready: %s (%s)\n", u.Email, u.ID)
+		return 0, nil
+
+	case "create-user":
+		email := fs.String("email", os.Getenv("DEMO_EMAIL"), "email")
+		password := fs.String("password", os.Getenv("DEMO_PASSWORD"), "password (policy-checked)")
+		phone := fs.String("phone", os.Getenv("DEMO_PHONE"), "phone in international format")
+		first := fs.String("first-name", "Demo", "first name")
+		last := fs.String("last-name", "User", "last name")
+		if err := fs.Parse(args); err != nil {
+			return 2, err
+		}
+		if *email == "" || *password == "" || *phone == "" {
+			return 2, errors.New("-email, -password and -phone are required (or DEMO_EMAIL, DEMO_PASSWORD, DEMO_PHONE)")
+		}
+		a, err := open(ctx, log)
+		if err != nil {
+			return 1, err
+		}
+		defer a.Close()
+		u, err := a.Identity.CreateLocalUser(ctx, *email, *password, *phone, *first, *last, false)
+		if err != nil {
+			return 1, err
+		}
+		fmt.Printf("verified user ready: %s (%s)\n", u.Email, u.ID)
 		return 0, nil
 
 	case "ingest-fixtures":

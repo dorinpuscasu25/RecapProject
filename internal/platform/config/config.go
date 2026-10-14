@@ -23,6 +23,10 @@ type Config struct {
 	AdminHTTPAddr string // internal listener for /metrics and pprof-free health
 	PublicBaseURL string
 	CORSOrigins   []string
+	// WebConsole serves the developer console at /console (default on outside production).
+	WebConsole bool
+	// DevMailpitURL lets /v1/dev/mailbox read from a local Mailpit (development only).
+	DevMailpitURL string
 	MaxBodyBytes  int64
 
 	DatabaseURL   string
@@ -125,6 +129,8 @@ func Load() (*Config, error) {
 		AdminHTTPAddr: env("ADMIN_HTTP_ADDR", ":9090"),
 		PublicBaseURL: env("PUBLIC_BASE_URL", "http://localhost:8080"),
 		CORSOrigins:   list("CORS_ALLOWED_ORIGINS", ""),
+		DevMailpitURL: env("DEV_MAILPIT_URL", ""),
+		WebConsole:    boolEnv("WEB_CONSOLE_ENABLED", env("APP_ENV", "development") != "production"),
 		MaxBodyBytes:  int64(intEnv("HTTP_MAX_BODY_BYTES", 1<<20)),
 
 		DatabaseURL:   env("DATABASE_URL", ""),

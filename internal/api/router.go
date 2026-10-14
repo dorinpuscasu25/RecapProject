@@ -27,6 +27,7 @@ import (
 	"github.com/dorinpuscasu25/recapproject/internal/search"
 	"github.com/dorinpuscasu25/recapproject/internal/sources"
 	"github.com/dorinpuscasu25/recapproject/internal/taxonomy"
+	"github.com/dorinpuscasu25/recapproject/web"
 
 	"log/slog"
 )
@@ -115,6 +116,13 @@ func (a *API) Router() http.Handler {
 	})
 	r.Get("/readyz", a.ready)
 	r.Get("/openapi.yaml", serveOpenAPI)
+	if a.Cfg.WebConsole {
+		r.Get("/", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/console/", http.StatusFound) })
+		r.Get("/console", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/console/", http.StatusMovedPermanently)
+		})
+		r.Get("/console/*", web.Handler("/console/").ServeHTTP)
+	}
 
 	idh := &identity.Handler{Svc: a.Identity}
 	r.Route("/v1", func(r chi.Router) {
@@ -125,9 +133,18 @@ func (a *API) Router() http.Handler {
 		idh.PublicRoutes(r)
 
 		// Development-only mail sink (never mounted in production; config refuses devsink there).
-		if a.Cfg.MailDriver == "devsink" && !a.Cfg.IsProduction() {
+		// With SMTP to a local Mailpit (compose), the same endpoint reads from Mailpit instead.
+		if !a.Cfg.IsProduction() && (a.Cfg.MailDriver == "devsink" || a.Cfg.DevMailpitURL != "") {
 			r.Get("/dev/mailbox", h(func(r *http.Request) (int, any, error) {
-				msgs, err := mail.DevMailbox(r.Context(), a.DB.Pool, r.URL.Query().Get("to"), 20)
+				to := r.URL.Query().Get("to")
+				if a.Cfg.MailDriver != "devsink" {
+					msgs, err := mail.MailpitMailbox(r.Context(), a.Cfg.DevMailpitURL, to, 5)
+					if err != nil {
+						return 0, nil, apperr.Unavailable("mailpit_unavailable", "Mailpit could not be read.")
+					}
+					return 200, list(msgs), nil
+				}
+				msgs, err := mail.DevMailbox(r.Context(), a.DB.Pool, to, 20)
 				return 200, list(msgs), err
 			}))
 		}

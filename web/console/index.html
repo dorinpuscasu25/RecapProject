@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Recap Console</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="app.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <button class="menu-toggle" id="menu-toggle" aria-label="Meniu">☰</button>
+    <span class="brand">Recap <small>consolă de test API</small></span>
+    <span class="spacer"></span>
+    <label class="small muted" for="lang" style="margin:0">Limba conținutului</label>
+    <select id="lang" style="width:auto">
+      <option value="ro">ro</option><option value="ru">ru</option><option value="en">en</option>
+    </select>
+    <button id="toggle-log" title="Arată fiecare cerere și răspuns JSON">Jurnal API</button>
+    <span id="who" class="small muted"></span>
+    <button id="logout" hidden>Ieșire</button>
+  </header>
+  <div class="layout" id="layout">
+    <nav class="side" id="nav"></nav>
+    <main id="view"><p class="loading">Se încarcă…</p></main>
+    <aside class="log" id="log" hidden></aside>
+  </div>
+</body>
+</html>

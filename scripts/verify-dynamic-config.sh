@@ -17,6 +17,17 @@ P=$(api POST /v1/admin/ai/providers "{\"slug\":\"alt-rules-$RUN\",\"kind\":\"heu
 M=$(api POST /v1/admin/ai/models "{\"provider_id\":\"$P\",\"slug\":\"alt-local-rules-$RUN\",\"model_name\":\"local-rules\",\"kind\":\"chat\",\"supports_structured\":true,\"enabled\":true}" | jq -r .id)
 R=$(api GET /v1/admin/ai/routes | jq -c '.items[] | select(.task=="category_classification" and .mode=="production")')
 ORIG=$(jq -r .primary_model_id <<<"$R")
+if [[ $(jq -r .primary_model <<<"$R") == alt-local-rules-* ]]; then # left over by an interrupted run
+  ORIG=$(api GET /v1/admin/ai/models | jq -r '.items[] | select(.slug=="local-rules") | .id')
+fi
+restore() { # always put the original model back and switch off this run's test provider
+  local cur; cur=$(api GET /v1/admin/ai/routes | jq -c '.items[] | select(.task=="category_classification" and .mode=="production")')
+  api PATCH /v1/admin/ai/routes/$(jq -r .id <<<"$cur") "{\"primary_model_id\":\"$ORIG\",\"version\":$(jq .version <<<"$cur")}" | jq -e --arg m "$ORIG" '.primary_model_id == $m' >/dev/null \
+    && echo "  restored the original classification model" || echo "  WARNING: could not restore the classification route"
+  P_VER=$(api GET /v1/admin/ai/providers | jq -r --arg id "$P" '.items[] | select(.id==$id) | .version')
+  [[ -n $P_VER ]] && api PATCH /v1/admin/ai/providers/$P "{\"enabled\":false,\"version\":$P_VER}" >/dev/null || true
+}
+trap restore EXIT
 api PATCH /v1/admin/ai/routes/$(jq -r .id <<<"$R") "{\"primary_model_id\":\"$M\",\"version\":$(jq .version <<<"$R")}" >/dev/null
 
 echo "== 2. new category, then a new source (test → enable → crawl), no restarts"
@@ -53,7 +64,4 @@ api POST /v1/admin/sources/$EP/disable | jq -c '{status}'
 echo "== archive the test category"
 api POST /v1/admin/categories/$(jq -r .id <<<"$CAT")/archive | jq -c '{slug, status}'
 
-echo "== restore the original classification route"
-R=$(api GET /v1/admin/ai/routes | jq -c '.items[] | select(.task=="category_classification" and .mode=="production")')
-api PATCH /v1/admin/ai/routes/$(jq -r .id <<<"$R") "{\"primary_model_id\":\"$ORIG\",\"version\":$(jq .version <<<"$R")}" >/dev/null && echo "  restored"
 echo "ALL DYNAMIC CONFIGURATION CHECKS PASSED"

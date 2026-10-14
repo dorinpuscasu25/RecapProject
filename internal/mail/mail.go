@@ -8,7 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -225,4 +229,51 @@ func DevMailbox(ctx context.Context, q db.Querier, to string, limit int) ([]DevM
 		err := r.Scan(&m.ID, &m.To, &m.Subject, &m.Body, &m.CreatedAt)
 		return m, err
 	})
+}
+
+// MailpitMailbox reads the newest messages for an address from a Mailpit instance (development
+// only), in the same shape as the dev sink, so local tools can read verification codes when
+// mail goes out over SMTP.
+func MailpitMailbox(ctx context.Context, base, to string, limit int) ([]DevMessage, error) {
+	to = strings.TrimSpace(to)
+	if to == "" {
+		return []DevMessage{}, nil
+	}
+	c := &http.Client{Timeout: 5 * time.Second}
+	get := func(path string, out any) error {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(base, "/")+path, nil)
+		if err != nil {
+			return err
+		}
+		res, err := c.Do(req)
+		if err != nil {
+			return err
+		}
+		defer res.Body.Close()
+		if res.StatusCode != http.StatusOK {
+			return fmt.Errorf("mailpit: %s", res.Status)
+		}
+		return json.NewDecoder(io.LimitReader(res.Body, 4<<20)).Decode(out)
+	}
+	var list struct {
+		Messages []struct {
+			ID      string    `json:"ID"`
+			Subject string    `json:"Subject"`
+			Created time.Time `json:"Created"`
+		} `json:"messages"`
+	}
+	if err := get("/api/v1/search?limit="+strconv.Itoa(limit)+"&query="+url.QueryEscape(`to:"`+to+`"`), &list); err != nil {
+		return nil, err
+	}
+	out := make([]DevMessage, 0, len(list.Messages))
+	for _, m := range list.Messages {
+		var msg struct {
+			Text string `json:"Text"`
+		}
+		if err := get("/api/v1/message/"+url.PathEscape(m.ID), &msg); err != nil {
+			return nil, err
+		}
+		out = append(out, DevMessage{ID: uuid.NewSHA1(uuid.NameSpaceURL, []byte(m.ID)), To: to, Subject: m.Subject, Body: msg.Text, CreatedAt: m.Created})
+	}
+	return out, nil
 }
