@@ -72,15 +72,31 @@ func (s *Service) Fetcher() *Fetcher { return s.fetcher }
 
 // ---------- Scheduling ----------
 
+// LiveSchedulingFlag is the feature flag administrators use to start and stop scheduled polling
+// of real (non-fixture) sources. Live fetching must also be allowed by CRAWL_LIVE_ENABLED.
+const LiveSchedulingFlag = "live_crawling"
+
+// LiveScheduling reports whether real sources are polled on schedule right now.
+func (s *Service) LiveScheduling(ctx context.Context) bool {
+	if !s.fetcher.LiveEnabled {
+		return false
+	}
+	var on bool
+	_ = s.db.Pool.QueryRow(ctx, `SELECT coalesce((SELECT enabled AND rollout_percent > 0 FROM feature_flags WHERE key=$1), false)`, LiveSchedulingFlag).Scan(&on)
+	return on
+}
+
 // ScheduleDue enqueues polls for due endpoints and advances next_poll_at atomically, so a poll
-// is scheduled at most once per interval across replicas.
+// is scheduled at most once per interval across replicas. Real sources are skipped (not
+// advanced) while live scheduling is off, so they poll as soon as it is switched on.
 func (s *Service) ScheduleDue(ctx context.Context) (int, error) {
 	n := 0
+	live := s.LiveScheduling(ctx)
 	err := s.db.Tx(ctx, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `SELECT `+epColsAlias+` FROM source_endpoints e
 			JOIN publishers p ON p.id = e.publisher_id AND p.status = 'active'
-			WHERE e.status='enabled' AND (e.next_poll_at IS NULL OR e.next_poll_at <= now())
-			ORDER BY e.priority, e.next_poll_at NULLS FIRST LIMIT 50 FOR UPDATE OF e SKIP LOCKED`)
+			WHERE e.status='enabled' AND (e.next_poll_at IS NULL OR e.next_poll_at <= now()) AND (e.endpoint_type = 'fixture' OR $1)
+			ORDER BY e.priority, e.next_poll_at NULLS FIRST LIMIT 50 FOR UPDATE OF e SKIP LOCKED`, live)
 		if err != nil {
 			return err
 		}
@@ -97,12 +113,6 @@ func (s *Service) ScheduleDue(ctx context.Context) (int, error) {
 		now := s.now()
 		for _, e := range due {
 			next := now.Add(time.Duration(e.PollIntervalSeconds) * time.Second)
-			if e.EndpointType != "fixture" && !s.fetcher.LiveEnabled {
-				if _, err := tx.Exec(ctx, `UPDATE source_endpoints SET next_poll_at=$2 WHERE id=$1`, e.ID, next); err != nil {
-					return err
-				}
-				continue
-			}
 			if !e.CrawlWindow.Allows(now) {
 				if _, err := tx.Exec(ctx, `UPDATE source_endpoints SET next_poll_at=$2 WHERE id=$1`, e.ID, now.Add(15*time.Minute)); err != nil {
 					return err

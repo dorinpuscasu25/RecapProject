@@ -3,6 +3,7 @@ package ingest
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -30,21 +31,31 @@ type ArticleSummary struct {
 	PublishedAt   *time.Time `json:"published_at,omitempty"`
 	FirstSeenAt   time.Time  `json:"first_seen_at"`
 	LastError     *string    `json:"last_error,omitempty"`
+	BodyChars     int        `json:"body_chars"`
+	Categories    []string   `json:"categories"`
+	EventID       *uuid.UUID `json:"event_id,omitempty"`
+	categories    *string
 }
 
-func (s *Service) ListArticles(ctx context.Context, status string, publisher *uuid.UUID, q string, limit int) ([]ArticleSummary, error) {
+func (s *Service) ListArticles(ctx context.Context, status string, publisher, endpoint *uuid.UUID, q string, limit int) ([]ArticleSummary, error) {
 	rows, err := s.db.Pool.Query(ctx, `SELECT a.id, a.publisher_id, p.name, a.title, a.canonical_url, a.language, a.status, a.content_type, a.revision,
-		a.duplicate_of, a.duplicate_kind, a.published_at, a.first_seen_at, a.last_error
+		a.duplicate_of, a.duplicate_kind, a.published_at, a.first_seen_at, a.last_error, a.body_chars,
+		(SELECT string_agg(c.slug, ',') FROM article_categories ac JOIN categories c ON c.id=ac.category_id WHERE ac.article_id=a.id),
+		(SELECT l.event_id FROM event_article_links l WHERE l.article_id=a.id AND l.unlinked_at IS NULL LIMIT 1)
 		FROM articles a JOIN publishers p ON p.id=a.publisher_id
 		WHERE ($1='' OR a.status=$1) AND ($2::uuid IS NULL OR a.publisher_id=$2) AND ($3='' OR a.title ILIKE '%'||$3||'%')
-		ORDER BY a.first_seen_at DESC LIMIT $4`, status, publisher, q, limit)
+		  AND ($5::uuid IS NULL OR a.source_endpoint_id=$5)
+		ORDER BY a.first_seen_at DESC LIMIT $4`, status, publisher, q, limit, endpoint)
 	if err != nil {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (ArticleSummary, error) {
 		var x ArticleSummary
 		err := r.Scan(&x.ID, &x.PublisherID, &x.Publisher, &x.Title, &x.CanonicalURL, &x.Language, &x.Status, &x.ContentType, &x.Revision,
-			&x.DuplicateOf, &x.DuplicateKind, &x.PublishedAt, &x.FirstSeenAt, &x.LastError)
+			&x.DuplicateOf, &x.DuplicateKind, &x.PublishedAt, &x.FirstSeenAt, &x.LastError, &x.BodyChars, &x.categories, &x.EventID)
+		if x.categories != nil {
+			x.Categories = strings.Split(*x.categories, ",")
+		}
 		return x, err
 	})
 }

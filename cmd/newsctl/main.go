@@ -12,7 +12,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
 	_ "time/tzdata" // IANA zones (Europe/Chisinau) without OS tzdata
@@ -342,71 +341,19 @@ func splitComma(s string) []string {
 	return out
 }
 
-type manifestSource struct {
-	Publisher  sources.PublisherInput  `json:"publisher"`
-	Permission sources.PermissionInput `json:"permission"`
-	Endpoint   sources.EndpointInput   `json:"endpoint"`
-}
-
-type fixtureManifest struct {
-	Sources []manifestSource `json:"sources"`
-}
-
-// registerFixtures creates (or reuses) publishers and endpoints from the manifest. Idempotent
-// by canonical domain and entry URL.
+// registerFixtures creates (or reuses) publishers and endpoints from the manifest and enables
+// them. Idempotent by canonical domain and entry URL.
 func registerFixtures(ctx context.Context, a *app.App, path string) ([]uuid.UUID, error) {
-	raw, err := os.ReadFile(filepath.Clean(path))
+	m, err := sources.LoadManifest(path)
 	if err != nil {
 		return nil, err
 	}
-	var m fixtureManifest
-	if err := json.Unmarshal(raw, &m); err != nil {
-		return nil, err
+	var ids []uuid.UUID
+	for _, r := range a.Sources.Import(ctx, m.Sources, sources.ImportOptions{Enable: true}) {
+		if r.Error != "" {
+			return nil, fmt.Errorf("%s: %s", r.Name, r.Error)
+		}
+		ids = append(ids, r.EndpointID)
 	}
-	return registerSources(ctx, a, m.Sources, true)
-}
-
-// registerSources creates or reuses publishers (by domain) and endpoints (by entry URL), applies
-// the permission and, when enable is set, enables the endpoints.
-func registerSources(ctx context.Context, a *app.App, list []manifestSource, enable bool) ([]uuid.UUID, error) {
-	var out []uuid.UUID
-	for _, s := range list {
-		var pubID uuid.UUID
-		err := a.DB.Pool.QueryRow(ctx, `SELECT id FROM publishers WHERE canonical_domain=$1`, *s.Publisher.CanonicalDomain).Scan(&pubID)
-		if db.IsNoRows(err) {
-			p, err := a.Sources.CreatePublisher(ctx, s.Publisher)
-			if err != nil {
-				return nil, fmt.Errorf("publisher %s: %w", *s.Publisher.Name, err)
-			}
-			pubID = p.ID
-		} else if err != nil {
-			return nil, err
-		}
-		if _, err := a.Sources.UpsertPermission(ctx, pubID, s.Permission); err != nil {
-			return nil, fmt.Errorf("permission %s: %w", *s.Publisher.Name, err)
-		}
-		active := "active"
-		if _, err := a.Sources.UpdatePublisher(ctx, pubID, sources.PublisherInput{Status: &active}); err != nil {
-			return nil, err
-		}
-		var epID uuid.UUID
-		err = a.DB.Pool.QueryRow(ctx, `SELECT id FROM source_endpoints WHERE entry_url=$1`, *s.Endpoint.EntryURL).Scan(&epID)
-		if db.IsNoRows(err) {
-			s.Endpoint.PublisherID = &pubID
-			e, err := a.Sources.CreateEndpoint(ctx, s.Endpoint)
-			if err != nil {
-				return nil, fmt.Errorf("endpoint %s: %w", *s.Endpoint.Name, err)
-			}
-			epID = e.ID
-		} else if err != nil {
-			return nil, err
-		}
-		if enable {
-			if _, err := a.Sources.SetEndpointStatus(ctx, epID, "enabled"); err != nil {
-				return nil, fmt.Errorf("enable %s: %w", *s.Endpoint.Name, err)
-			}
-		}
-		out = append(out, epID)
-	}
-	return out, nil
+	return ids, nil
 }

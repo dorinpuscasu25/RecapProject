@@ -385,6 +385,12 @@ func Operations() []Op {
 		{Method: "POST", Path: "/v1/admin/sources/{id}/pending-permission", Tag: sources_, Summary: "Mark as awaiting permission", Access: Staff, Perms: []string{"sources:read", "sources:write"}, Resp: sources.Endpoint{}},
 		{Method: "POST", Path: "/v1/admin/sources/{id}/test", Tag: sources_, Summary: "Test the saved configuration", Access: Staff, Perms: []string{"sources:read", "sources:write"}, Resp: ingest.TestSourceResult{}},
 		{Method: "POST", Path: "/v1/admin/sources/{id}/crawl", Tag: sources_, Summary: "Crawl now", Access: Staff, Perms: []string{"sources:read", "sources:write"}, Req: CrawlRequest{}, Resp: CrawlAccepted{}, Status: 202},
+		{Method: "GET", Path: "/v1/admin/crawling", Tag: sources_, Summary: "Live crawling overview: switches, source counts, recent runs, pipeline backlog", Access: Staff, Perms: []string{"sources:read"}, Resp: api.CrawlingStatus{}},
+		{Method: "PUT", Path: "/v1/admin/crawling", Tag: sources_, Summary: "Start or stop scheduled crawling of real sources (feature flag live_crawling)", Access: Staff, Perms: []string{"sources:read", "sources:write"}, Req: api.CrawlingSwitch{}, Resp: api.CrawlingStatus{},
+			Notes: "Real sites are fetched only when CRAWL_LIVE_ENABLED is also true. Manual crawls of a single source work while scheduling is stopped."},
+		{Method: "POST", Path: "/v1/admin/crawling/run-now", Tag: sources_, Summary: "Make every enabled real source due now", Access: Staff, Perms: []string{"sources:read", "sources:write"}, Resp: api.RunAllAccepted{}, Status: 202, Conflict: true},
+		{Method: "GET", Path: "/v1/admin/source-presets", Tag: sources_, Summary: "Source lists that can be imported (config/sources), with import state", Access: Staff, Perms: []string{"sources:read"}, Resp: sources.Preset{}, List: true},
+		{Method: "POST", Path: "/v1/admin/source-presets/{name}/import", Tag: sources_, Summary: "Import a source list under a stated legal basis (idempotent)", Access: Staff, Perms: []string{"sources:read", "sources:write"}, Req: api.PresetImportRequest{}, Resp: sources.ImportResult{}, List: true},
 		{Method: "GET", Path: "/v1/admin/sources/{id}/runs", Tag: sources_, Summary: "Crawl runs", Access: Staff, Perms: []string{"sources:read"}, Resp: elem((*sources.Service).ListCrawlRuns), List: true, Query: listQ},
 		{Method: "GET", Path: "/v1/admin/sources/{id}/health", Tag: sources_, Summary: "Health, coverage and anomalies", Access: Staff, Perms: []string{"sources:read"}, Resp: sources.Health{}},
 		{Method: "POST", Path: "/v1/admin/sources/{id}/reprocess", Tag: sources_, Summary: "Reprocess this source's articles", Access: Staff, Perms: []string{"sources:read", "sources:write"}, Req: api.ReprocessRequest{}, Resp: JobAccepted{}, Status: 202},
@@ -410,7 +416,7 @@ func Operations() []Op {
 
 		// ---- admin: articles & events ----
 		{Method: "GET", Path: "/v1/admin/articles", Tag: "Admin: content", Summary: "Articles by processing status", Access: Staff, Perms: []string{"articles:moderate"}, Resp: elem((*ingest.Service).ListArticles), List: true,
-			Query: []string{"status", "publisher_id", "q", "limit"}},
+			Query: []string{"status", "publisher_id", "source_endpoint_id", "q", "limit"}},
 		{Method: "GET", Path: "/v1/admin/articles/{id}", Tag: "Admin: content", Summary: "Article with versions, categories, entities, facts, claims and event links", Access: Staff, Perms: []string{"articles:moderate"}, Resp: ret((*ingest.Service).ArticleDetail)},
 		{Method: "POST", Path: "/v1/admin/articles/{id}/quarantine", Tag: "Admin: content", Summary: "Quarantine", Access: Staff, Perms: []string{"articles:moderate"}, Req: ReasonRequest{}, Resp: Accepted{}, Status: 202},
 		{Method: "POST", Path: "/v1/admin/articles/{id}/release", Tag: "Admin: content", Summary: "Release from quarantine", Access: Staff, Perms: []string{"articles:moderate"}, Req: ReasonRequest{}, Resp: Accepted{}, Status: 202},

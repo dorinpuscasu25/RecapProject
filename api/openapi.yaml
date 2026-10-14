@@ -951,6 +951,143 @@ components:
         - version
         - updated_at
       type: object
+    api.CrawlingStatus:
+      properties:
+        articles_accepted_last_24h:
+          type: integer
+        articles_last_24h:
+          type: integer
+        due_now:
+          type: integer
+        flag_enabled:
+          type: boolean
+        last_run_at:
+          format: date-time
+          type: string
+        live_fetch_allowed:
+          type: boolean
+        note:
+          type: string
+        pipeline_pending:
+          type: integer
+        recent_runs:
+          items:
+            $ref: '#/components/schemas/api.RecentRun'
+          type: array
+        runs_last_hour:
+          type: integer
+        scheduling:
+          type: boolean
+        sources:
+          properties:
+            degraded:
+              type: integer
+            disabled:
+              type: integer
+            enabled:
+              type: integer
+            failing:
+              type: integer
+            paused:
+              type: integer
+            pending_permission:
+              type: integer
+            total:
+              type: integer
+          required:
+            - total
+            - enabled
+            - paused
+            - disabled
+            - pending_permission
+            - failing
+            - degraded
+          type: object
+      required:
+        - live_fetch_allowed
+        - flag_enabled
+        - scheduling
+        - sources
+        - due_now
+        - runs_last_hour
+        - articles_accepted_last_24h
+        - articles_last_24h
+        - pipeline_pending
+        - recent_runs
+      type: object
+    api.CrawlingSwitch:
+      properties:
+        enabled:
+          type: boolean
+      required:
+        - enabled
+      type: object
+    api.PresetImportRequest:
+      properties:
+        enable:
+          type: boolean
+        legal_basis:
+          type: string
+        max_items_per_poll:
+          type: integer
+        only:
+          items:
+            type: string
+          type: array
+      required:
+        - legal_basis
+        - enable
+      type: object
+    api.RecentRun:
+      properties:
+        accepted_count:
+          type: integer
+        completed_at:
+          format: date-time
+          type: string
+        discovered_count:
+          type: integer
+        duplicate_count:
+          type: integer
+        error_count:
+          type: integer
+        id:
+          type: string
+        rejected_count:
+          type: integer
+        source:
+          type: string
+        source_endpoint_id:
+          type: string
+        started_at:
+          format: date-time
+          type: string
+        status:
+          type: string
+        trigger:
+          type: string
+      required:
+        - id
+        - source_endpoint_id
+        - source
+        - trigger
+        - status
+        - started_at
+        - discovered_count
+        - accepted_count
+        - duplicate_count
+        - rejected_count
+        - error_count
+      type: object
+    api.RunAllAccepted:
+      properties:
+        note:
+          type: string
+        scheduled:
+          type: integer
+      required:
+        - scheduled
+      type: object
     audit.Log:
       properties:
         action:
@@ -2526,13 +2663,22 @@ components:
       type: object
     ingest.ArticleSummary:
       properties:
+        body_chars:
+          type: integer
         canonical_url:
           type: string
+        categories:
+          items:
+            type: string
+          type: array
         content_type:
           type: string
         duplicate_kind:
           type: string
         duplicate_of:
+          format: uuid
+          type: string
+        event_id:
           format: uuid
           type: string
         first_seen_at:
@@ -2570,6 +2716,8 @@ components:
         - content_type
         - revision
         - first_seen_at
+        - body_chars
+        - categories
       type: object
     ingest.ItemPreview:
       properties:
@@ -3486,6 +3634,28 @@ components:
         - articles_total
         - articles_last_24h
       type: object
+    sources.ImportResult:
+      properties:
+        created:
+          type: boolean
+        endpoint_id:
+          format: uuid
+          type: string
+        entry_url:
+          type: string
+        error:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+      required:
+        - name
+        - entry_url
+        - endpoint_id
+        - created
+        - status
+      type: object
     sources.Permission:
       properties:
         allow_audio:
@@ -3603,6 +3773,50 @@ components:
         - terms_review_status
         - attribution_text
         - notes
+      type: object
+    sources.Preset:
+      properties:
+        description:
+          type: string
+        name:
+          type: string
+        sources:
+          items:
+            $ref: '#/components/schemas/sources.PresetItem'
+          type: array
+      required:
+        - name
+        - description
+        - sources
+      type: object
+    sources.PresetItem:
+      properties:
+        domain:
+          type: string
+        endpoint_id:
+          format: uuid
+          type: string
+        endpoint_type:
+          type: string
+        entry_url:
+          type: string
+        languages:
+          items:
+            type: string
+          type: array
+        name:
+          type: string
+        publisher:
+          type: string
+        status:
+          type: string
+      required:
+        - publisher
+        - domain
+        - name
+        - endpoint_type
+        - entry_url
+        - languages
       type: object
     sources.ProfileFixture:
       properties:
@@ -4580,6 +4794,11 @@ paths:
           required: false
           schema:
             format: uuid
+            type: string
+        - in: query
+          name: source_endpoint_id
+          required: false
+          schema:
             type: string
         - in: query
           name: q
@@ -5561,6 +5780,86 @@ paths:
         - 'Admin: fact-checking'
       x-required-permissions:
         - factcheck:review
+  /v1/admin/crawling:
+    get:
+      description: 'Required permissions: `sources:read`.'
+      operationId: getAdminCrawling
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CrawlingStatus'
+          description: OK
+        "401":
+          $ref: '#/components/responses/Unauthenticated'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "500":
+          $ref: '#/components/responses/InternalError'
+      summary: 'Live crawling overview: switches, source counts, recent runs, pipeline backlog'
+      tags:
+        - Sources & publishers
+      x-required-permissions:
+        - sources:read
+    put:
+      description: |-
+        Required permissions: `sources:read`, `sources:write`.
+
+        Real sites are fetched only when CRAWL_LIVE_ENABLED is also true. Manual crawls of a single source work while scheduling is stopped.
+      operationId: putAdminCrawling
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/api.CrawlingSwitch'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CrawlingStatus'
+          description: OK
+        "401":
+          $ref: '#/components/responses/Unauthenticated'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "422":
+          $ref: '#/components/responses/ValidationFailed'
+        "500":
+          $ref: '#/components/responses/InternalError'
+      summary: Start or stop scheduled crawling of real sources (feature flag live_crawling)
+      tags:
+        - Sources & publishers
+      x-required-permissions:
+        - sources:read
+        - sources:write
+  /v1/admin/crawling/run-now:
+    post:
+      description: 'Required permissions: `sources:read`, `sources:write`.'
+      operationId: postAdminCrawlingRunNow
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.RunAllAccepted'
+          description: Accepted for asynchronous processing
+        "401":
+          $ref: '#/components/responses/Unauthenticated'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "409":
+          $ref: '#/components/responses/Conflict'
+        "500":
+          $ref: '#/components/responses/InternalError'
+      summary: Make every enabled real source due now
+      tags:
+        - Sources & publishers
+      x-required-permissions:
+        - sources:read
+        - sources:write
   /v1/admin/dead-letters:
     get:
       description: 'Required permissions: `jobs:manage`.'
@@ -6900,6 +7199,87 @@ paths:
         - 'Admin: AI'
       x-required-permissions:
         - ai:configure
+  /v1/admin/source-presets:
+    get:
+      description: 'Required permissions: `sources:read`.'
+      operationId: getAdminSourcePresets
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  items:
+                    items:
+                      $ref: '#/components/schemas/sources.Preset'
+                    type: array
+                  next_cursor:
+                    description: Present when more results exist.
+                    type: string
+                required:
+                  - items
+                type: object
+          description: OK
+        "401":
+          $ref: '#/components/responses/Unauthenticated'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "500":
+          $ref: '#/components/responses/InternalError'
+      summary: Source lists that can be imported (config/sources), with import state
+      tags:
+        - Sources & publishers
+      x-required-permissions:
+        - sources:read
+  /v1/admin/source-presets/{name}/import:
+    post:
+      description: 'Required permissions: `sources:read`, `sources:write`.'
+      operationId: postAdminSourcePresetsNameImport
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/api.PresetImportRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  items:
+                    items:
+                      $ref: '#/components/schemas/sources.ImportResult'
+                    type: array
+                  next_cursor:
+                    description: Present when more results exist.
+                    type: string
+                required:
+                  - items
+                type: object
+          description: OK
+        "401":
+          $ref: '#/components/responses/Unauthenticated'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "422":
+          $ref: '#/components/responses/ValidationFailed'
+        "500":
+          $ref: '#/components/responses/InternalError'
+      summary: Import a source list under a stated legal basis (idempotent)
+      tags:
+        - Sources & publishers
+      x-required-permissions:
+        - sources:read
+        - sources:write
   /v1/admin/sources:
     get:
       description: 'Required permissions: `sources:read`.'

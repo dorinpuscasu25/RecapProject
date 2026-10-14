@@ -184,6 +184,7 @@ func (a *API) Router() http.Handler {
 			r.Group(func(r chi.Router) {
 				r.Use(identity.Require("sources:read"))
 				a.adminSources(r, requirePerm("sources:write"))
+				a.adminCrawling(r, requirePerm("sources:write"))
 			})
 			r.Group(func(r chi.Router) {
 				r.Use(identity.Require("jobs:manage"))

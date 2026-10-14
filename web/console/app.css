@@ -120,3 +120,7 @@ th { color: var(--muted); font-weight: 600; }
   .menu-toggle { display: inline-block; }
   main { padding: 1rem; }
 }
+a.btn { display: inline-block; text-decoration: none; color: var(--text); }
+a.btn:hover { border-color: var(--accent); text-decoration: none; }
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+input[type=checkbox], input[type=radio] { width: auto; padding: 0; }

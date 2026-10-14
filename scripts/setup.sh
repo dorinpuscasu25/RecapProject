@@ -9,7 +9,8 @@ sed -i.bak \
   -e "s|^SECRETS_ENCRYPTION_KEY=.*|SECRETS_ENCRYPTION_KEY=$(rand)|" \
   -e "s|^AUTH_CODE_HMAC_SECRET=.*|AUTH_CODE_HMAC_SECRET=$(rand)|" \
   -e "s|^AUTH_SIGNING_KEYS=.*|AUTH_SIGNING_KEYS=k1:$(rand)|" \
-  -e "s|^AUTH_ACTIVE_KEY_ID=.*|AUTH_ACTIVE_KEY_ID=k1|" .env
+  -e "s|^AUTH_ACTIVE_KEY_ID=.*|AUTH_ACTIVE_KEY_ID=k1|" \
+  -e "s|^CRAWL_LIVE_ENABLED=.*|CRAWL_LIVE_ENABLED=true|" .env
 # A first administrator for local use; change the address and password before sharing the stack.
 admin_pw="Adm1n-$(rand | tr -dc 'A-Za-z0-9' | head -c 16)"
 demo_pw="Rec4p-$(rand | tr -dc 'A-Za-z0-9' | head -c 10)"

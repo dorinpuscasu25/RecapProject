@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -62,12 +61,8 @@ func verifySources(ctx context.Context, args []string, log *slog.Logger) (int, e
 	if !a.Cfg.CrawlLiveEnabled {
 		return 2, errors.New("live crawling is disabled: set CRAWL_LIVE_ENABLED=true")
 	}
-	raw, err := os.ReadFile(filepath.Clean(*manifest))
+	m, err := sources.LoadManifest(*manifest)
 	if err != nil {
-		return 1, err
-	}
-	var m fixtureManifest
-	if err := json.Unmarshal(raw, &m); err != nil {
 		return 1, err
 	}
 	var checks []*endpointCheck
@@ -76,16 +71,17 @@ func verifySources(ctx context.Context, args []string, log *slog.Logger) (int, e
 		if *only != "" && !strings.Contains(strings.ToLower(*s.Endpoint.Name), strings.ToLower(*only)) {
 			continue
 		}
-		s.Permission = sources.PermissionInput{LegalBasis: *legal + " (verification run " + start.UTC().Format(time.RFC3339) + ")",
-			PermissionStatus: "granted", AllowCrawl: true, AllowStoreFullText: true, AllowSummarize: true, AllowEmbed: true, AllowSnippets: true,
-			RobotsReviewStatus: "unreviewed", TermsReviewStatus: "unreviewed", AttributionText: "Sursa: " + *s.Publisher.Name}
-		mx := *maxItems
-		s.Endpoint.MaxItemsPerPoll = &mx
-		ids, err := registerSources(ctx, a, []manifestSource{s}, false)
-		if err != nil {
-			checks = append(checks, &endpointCheck{Name: *s.Endpoint.Name, URL: *s.Endpoint.EntryURL, Errors: []string{err.Error()}})
+		imp := a.Sources.Import(ctx, []sources.ManifestSource{s}, sources.ImportOptions{
+			LegalBasis: *legal + " (verification run " + start.UTC().Format(time.RFC3339) + ")", MaxItemsPerPoll: *maxItems})
+		if len(imp) == 0 || imp[0].Error != "" {
+			msg := "not imported"
+			if len(imp) > 0 {
+				msg = imp[0].Error
+			}
+			checks = append(checks, &endpointCheck{Name: *s.Endpoint.Name, URL: *s.Endpoint.EntryURL, Errors: []string{msg}})
 			continue
 		}
+		ids := []uuid.UUID{imp[0].EndpointID}
 		c := &endpointCheck{ID: ids[0], Name: *s.Endpoint.Name, URL: *s.Endpoint.EntryURL, Type: *s.Endpoint.EndpointType, Errors: []string{}}
 		fap := true
 		res, err := a.Ingest.TestSource(ctx, ingest.TestSourceInput{EndpointType: c.Type, EntryURL: c.URL, FetchArticlePages: &fap, PreviewItems: 2})

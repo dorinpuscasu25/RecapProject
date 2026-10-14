@@ -27,7 +27,9 @@ type Config struct {
 	WebConsole bool
 	// DevMailpitURL lets /v1/dev/mailbox read from a local Mailpit (development only).
 	DevMailpitURL string
-	MaxBodyBytes  int64
+	// SourcePresetsDir holds source manifests administrators can import (config/sources).
+	SourcePresetsDir string
+	MaxBodyBytes     int64
 
 	DatabaseURL   string
 	DBMaxConns    int32
@@ -123,15 +125,16 @@ func (c *Config) IsDevelopment() bool { return c.Env == "development" }
 func Load() (*Config, error) {
 	var rangeErrs []error
 	c := &Config{
-		Env:           env("APP_ENV", "development"),
-		ServiceName:   env("SERVICE_NAME", "newsintel"),
-		HTTPAddr:      env("HTTP_ADDR", ":8080"),
-		AdminHTTPAddr: env("ADMIN_HTTP_ADDR", ":9090"),
-		PublicBaseURL: env("PUBLIC_BASE_URL", "http://localhost:8080"),
-		CORSOrigins:   list("CORS_ALLOWED_ORIGINS", ""),
-		DevMailpitURL: env("DEV_MAILPIT_URL", ""),
-		WebConsole:    boolEnv("WEB_CONSOLE_ENABLED", env("APP_ENV", "development") != "production"),
-		MaxBodyBytes:  int64(intEnv("HTTP_MAX_BODY_BYTES", 1<<20)),
+		Env:              env("APP_ENV", "development"),
+		ServiceName:      env("SERVICE_NAME", "newsintel"),
+		HTTPAddr:         env("HTTP_ADDR", ":8080"),
+		AdminHTTPAddr:    env("ADMIN_HTTP_ADDR", ":9090"),
+		PublicBaseURL:    env("PUBLIC_BASE_URL", "http://localhost:8080"),
+		CORSOrigins:      list("CORS_ALLOWED_ORIGINS", ""),
+		DevMailpitURL:    env("DEV_MAILPIT_URL", ""),
+		SourcePresetsDir: env("SOURCE_PRESETS_DIR", "config/sources"),
+		WebConsole:       boolEnv("WEB_CONSOLE_ENABLED", env("APP_ENV", "development") != "production"),
+		MaxBodyBytes:     int64(intEnv("HTTP_MAX_BODY_BYTES", 1<<20)),
 
 		DatabaseURL:   env("DATABASE_URL", ""),
 		DBMaxConns:    int32(boundedIntEnv("DB_MAX_CONNS", 20, 1, 1000, &rangeErrs)), // #nosec G115 -- bounded

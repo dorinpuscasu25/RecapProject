@@ -56,6 +56,14 @@ scripts/demo.sh           # register → verify (code from Mailpit) → feed →
 scripts/e2e.sh            # 23 end-to-end checks against the running stack, including a short load test
 ```
 
+**Web console and crawling.** http://localhost:8080 opens a test console that uses the same API as
+the mobile apps (with a live request/response log). Log in as the admin from `.env` to manage
+crawling without commands: **Crawling** (start/stop scheduled crawling, live counters, recent
+runs), **Surse** (add a site, test it before saving, start/stop each source, set how often it is
+read, see the articles it produced), **Importă o listă** (the Moldovan RO/RU list in
+`config/sources/moldova.json`) and **AI** (paid models only for summaries and chat; article
+processing stays on free local models).
+
 **Keys.** Nothing else is required: without API keys every AI task runs on deterministic local
 rules and embeddings come from the local ML service. To use remote models, put
 `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `GEMINI_API_KEY` in `.env`, run

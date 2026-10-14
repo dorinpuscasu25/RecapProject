@@ -30,7 +30,11 @@ func (a *API) adminContent(r chi.Router) {
 			if err != nil {
 				return 0, nil, err
 			}
-			l, err := a.Ingest.ListArticles(r.Context(), r.URL.Query().Get("status"), pub, r.URL.Query().Get("q"), httpx.Limit(r, 50, 500))
+			src, err := queryUUID(r, "source_endpoint_id")
+			if err != nil {
+				return 0, nil, err
+			}
+			l, err := a.Ingest.ListArticles(r.Context(), r.URL.Query().Get("status"), pub, src, r.URL.Query().Get("q"), httpx.Limit(r, 50, 500))
 			return 200, list(l), err
 		}))
 		r.Get("/admin/articles/{id}", h(func(r *http.Request) (int, any, error) {
