@@ -81,8 +81,8 @@ func NewSealer(key []byte) (*Sealer, error) {
 }
 
 func (s *Sealer) Seal(plain []byte) []byte {
-	nonce := RandomBytes(s.aead.NonceSize())
-	return append(nonce, s.aead.Seal(nil, nonce, plain, nil)...)
+	nonce := RandomBytes(s.aead.NonceSize())                     // fresh crypto/rand nonce per message
+	return append(nonce, s.aead.Seal(nil, nonce, plain, nil)...) // #nosec G407 -- nonce is random per call (RandomBytes)
 }
 
 func (s *Sealer) Open(sealed []byte) ([]byte, error) {

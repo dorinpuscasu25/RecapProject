@@ -2244,6 +2244,8 @@ components:
         completed_at:
           format: date-time
           type: string
+        download_url:
+          type: string
         id:
           format: uuid
           type: string
@@ -2253,6 +2255,9 @@ components:
           format: date-time
           type: string
         status:
+          type: string
+        url_expires_at:
+          format: date-time
           type: string
       required:
         - id
@@ -9683,7 +9688,10 @@ paths:
         - me:manage
   /v1/users/me/data-requests:
     get:
-      description: Requires a verified, active human account (permission `me:manage`).
+      description: |-
+        Requires a verified, active human account (permission `me:manage`).
+
+        Completed exports carry download_url: a presigned object-storage URL (url_expires_at) or the authenticated download endpoint.
       operationId: getUsersMeDataRequests
       responses:
         "200":
@@ -9709,6 +9717,40 @@ paths:
         "500":
           $ref: '#/components/responses/InternalError'
       summary: Export/deletion requests
+      tags:
+        - Account
+      x-required-permissions:
+        - me:manage
+  /v1/users/me/data-requests/{id}/download:
+    get:
+      description: Requires a verified, active human account (permission `me:manage`).
+      operationId: getUsersMeDataRequestsIdDownload
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+          description: JSON file attachment
+        "401":
+          $ref: '#/components/responses/Unauthenticated'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "409":
+          $ref: '#/components/responses/Conflict'
+        "500":
+          $ref: '#/components/responses/InternalError'
+      summary: Download a completed personal data export (owner only)
       tags:
         - Account
       x-required-permissions:

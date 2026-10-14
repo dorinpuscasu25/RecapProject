@@ -129,17 +129,19 @@ func (s *Service) Create(ctx context.Context, user uuid.UUID, in CreateInput) (*
 	title := ""
 	if in.ScopeID != nil {
 		var q string
+		args := []any{*in.ScopeID}
 		switch in.ScopeType {
 		case "event":
 			q = `SELECT COALESCE(titles->>'ro', '') FROM events WHERE id=$1 AND status='active'`
 		case "briefing":
-			q = `SELECT title FROM briefings WHERE id=$1 AND user_id='` + user.String() + `'`
+			q = `SELECT title FROM briefings WHERE id=$1 AND user_id=$2`
+			args = append(args, user)
 		case "claim":
-			q = `SELECT canonical_text FROM claims WHERE id=$1`
+			q = `SELECT canonical_text FROM claims WHERE id=$1 AND status <> 'withdrawn'`
 		case "article":
 			q = `SELECT title FROM articles WHERE id=$1 AND status='enriched' AND tombstoned_at IS NULL`
 		}
-		if err := s.db.Pool.QueryRow(ctx, q, *in.ScopeID).Scan(&title); err != nil {
+		if err := s.db.Pool.QueryRow(ctx, q, args...).Scan(&title); err != nil {
 			return nil, apperr.NotFound("scope_not_found", "The chat scope was not found.")
 		}
 	}

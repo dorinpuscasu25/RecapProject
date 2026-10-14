@@ -1,0 +1,82 @@
+name: ci
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: newsintel
+          POSTGRES_PASSWORD: newsintel
+          POSTGRES_DB: newsintel
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U newsintel" --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - name: vet
+        run: go vet ./...
+      - name: OpenAPI is up to date
+        run: go run ./cmd/openapi-gen && git diff --exit-code api/openapi.yaml
+      - name: test
+        run: go test -count=1 ./...
+      - name: gosec
+        run: go run github.com/securego/gosec/v2/cmd/gosec@v2.22.4 -quiet -exclude=G104 ./...
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+
+  ml:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/ml
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: ruff check .
+      - run: pytest -q
+        env:
+          ML_EMBEDDING_BACKEND: hash
+          ML_RERANK_BACKEND: embedding
+
+  compose:
+    # Full stack: images, init, pipeline over fixtures, consumer walkthrough, dynamic config,
+    # object storage and a short load test. Uses the hash embedding backend to avoid model downloads.
+    runs-on: ubuntu-latest
+    needs: [go, ml]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: configure
+        run: |
+          ./scripts/setup.sh
+          printf 'ML_EMBEDDING_BACKEND=hash\nML_RERANK_BACKEND=embedding\n' >> .env
+      - name: start
+        run: |
+          docker compose up -d --build
+          timeout 600 bash -c 'until curl -sf localhost:8080/readyz && curl -sf localhost:8000/readyz; do sleep 5; done'
+          timeout 300 bash -c 'until [ "$(docker compose exec -T postgres psql -U newsintel -d newsintel -tAc "SELECT count(*) FROM events" 2>/dev/null | tr -d "[:space:]")" -gt 0 ] 2>/dev/null; do sleep 5; done'
+      - name: e2e
+        run: LOAD_SECONDS=10 scripts/e2e.sh
+      - name: logs on failure
+        if: failure()
+        run: docker compose logs --tail 200

@@ -375,6 +375,17 @@ func TestDataExportAndDeletion(t *testing.T) {
 	if r.Str("items", "0", "status") != "succeeded" {
 		t.Fatalf("export not completed: %s", r.Raw)
 	}
+	// Filesystem storage cannot presign, so the owner downloads through the API.
+	dl := r.Str("items", "0", "download_url")
+	if dl != "/v1/users/me/data-requests/"+r.Str("items", "0", "id")+"/download" {
+		t.Fatalf("unexpected download_url %q", dl)
+	}
+	file := e.MustStatus(e.Do("GET", dl, access, nil), 200)
+	if !strings.Contains(string(file.Raw), "privacy@example.com") || !strings.Contains(string(file.Raw), `"format_version"`) {
+		t.Fatalf("export file content unexpected: %.200s", file.Raw)
+	}
+	other, _, _ := e.RegisterVerified("someone-else@example.com")
+	e.MustStatus(e.Do("GET", dl, other, nil), 404)
 	e.MustStatus(e.Do("POST", "/v1/users/me/deletion", access, map[string]any{"password": "Str0ng-Passw0rd!"}), 202)
 	if e.Do("GET", "/v1/users/me", access, nil).Status != 401 {
 		t.Fatal("deletion must revoke sessions")

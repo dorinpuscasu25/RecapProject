@@ -148,7 +148,8 @@ func verifySources(ctx context.Context, args []string, log *slog.Logger) (int, e
 	if path == "" {
 		path = filepath.Join("var", "reports", "sources-"+start.UTC().Format("20060102-150405")+".md")
 	}
-	_ = os.MkdirAll(filepath.Dir(path), 0o755)
+	_ = os.MkdirAll(filepath.Dir(path), 0o755) // #nosec G301 -- operator report directory
+	// #nosec G306 -- report has no secrets
 	if err := os.WriteFile(path, []byte(report), 0o644); err != nil {
 		return 1, err
 	}

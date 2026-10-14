@@ -3,7 +3,9 @@ package identity
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +21,7 @@ import (
 	"github.com/dorinpuscasu25/recapproject/internal/platform/db"
 	"github.com/dorinpuscasu25/recapproject/internal/platform/ids"
 	"github.com/dorinpuscasu25/recapproject/internal/platform/principal"
+	"github.com/dorinpuscasu25/recapproject/internal/platform/storage"
 )
 
 const userCols = `u.id, u.first_name, u.last_name, u.email, u.email_normalized, u.email_verified_at, u.phone_e164,
@@ -295,7 +298,15 @@ type DataRequest struct {
 	Status      string     `json:"status"`
 	RequestedAt time.Time  `json:"requested_at"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
+	// DownloadURL is set for completed exports: a short-lived presigned URL (S3) or the
+	// authenticated download endpoint.
+	DownloadURL  string     `json:"download_url,omitempty"`
+	URLExpiresAt *time.Time `json:"url_expires_at,omitempty"`
+	resultKey    *string
 }
+
+// exportURLTTL bounds how long a presigned export link stays valid.
+const exportURLTTL = 15 * time.Minute
 
 const JobUserExport = "user.export"
 const JobUserDeletion = "user.deletion"
@@ -353,15 +364,52 @@ func (s *Service) RequestDeletion(ctx context.Context, p *principal.Principal, i
 }
 
 func (s *Service) ListDataRequests(ctx context.Context, p *principal.Principal) ([]DataRequest, error) {
-	rows, err := s.db.Pool.Query(ctx, `SELECT id, kind, status, requested_at, completed_at FROM user_data_requests WHERE user_id=$1 ORDER BY requested_at DESC LIMIT 50`, p.ID)
+	rows, err := s.db.Pool.Query(ctx, `SELECT id, kind, status, requested_at, completed_at, result_object_key FROM user_data_requests WHERE user_id=$1 ORDER BY requested_at DESC LIMIT 50`, p.ID)
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (DataRequest, error) {
+	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (DataRequest, error) {
 		var d DataRequest
-		err := r.Scan(&d.ID, &d.Kind, &d.Status, &d.RequestedAt, &d.CompletedAt)
+		err := r.Scan(&d.ID, &d.Kind, &d.Status, &d.RequestedAt, &d.CompletedAt, &d.resultKey)
 		return d, err
 	})
+	if err != nil || s.store == nil {
+		return list, err
+	}
+	for i := range list {
+		d := &list[i]
+		if d.Kind != "export" || d.Status != "succeeded" || d.resultKey == nil {
+			continue
+		}
+		if u, err := s.store.PresignGet(ctx, *d.resultKey, exportURLTTL); err == nil && u != "" {
+			exp := s.now().Add(exportURLTTL).UTC()
+			d.DownloadURL, d.URLExpiresAt = u, &exp
+		} else {
+			d.DownloadURL = "/v1/users/me/data-requests/" + d.ID.String() + "/download"
+		}
+	}
+	return list, nil
+}
+
+// OpenExport streams a completed export to its owner.
+func (s *Service) OpenExport(ctx context.Context, p *principal.Principal, id uuid.UUID) (io.ReadCloser, int64, error) {
+	var key *string
+	var status string
+	err := s.db.Pool.QueryRow(ctx, `SELECT status, result_object_key FROM user_data_requests WHERE id=$1 AND user_id=$2 AND kind='export'`, id, p.ID).Scan(&status, &key)
+	if db.IsNoRows(err) {
+		return nil, 0, apperr.NotFound("data_request_not_found", "Data request not found.")
+	}
+	if err != nil {
+		return nil, 0, err
+	}
+	if status != "succeeded" || key == nil || s.store == nil {
+		return nil, 0, apperr.Conflict("export_not_ready", "The export is not ready ("+status+").")
+	}
+	rc, n, err := s.store.Get(ctx, *key)
+	if errors.Is(err, storage.ErrNotFound) {
+		return nil, 0, apperr.NotFound("export_expired", "The export file is no longer available; request a new export.")
+	}
+	return rc, n, err
 }
 
 // BuildExport assembles the user's personal data (profile, preferences, interests, sessions

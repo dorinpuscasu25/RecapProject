@@ -21,7 +21,10 @@ api PATCH /v1/admin/ai/routes/$(jq -r .id <<<"$R") "{\"primary_model_id\":\"$M\"
 
 echo "== 2. new category, then a new source (test → enable → crawl), no restarts"
 ENERGY=$(api GET /v1/admin/categories | jq -r '.. | objects | select(.slug?=="energy") | .id' | head -1)
-api POST /v1/admin/categories "{\"slug\":\"startups-$RUN\",\"names\":{\"ro\":\"Startup-uri $RUN\",\"ru\":\"Стартапы $RUN\",\"en\":\"Startups $RUN\"},\"classification_hints\":[\"startup-uri\",\"centru de tehnologie\",\"стартап\"],\"status\":\"active\"}" | jq -c '{slug, status}'
+# archive categories left by earlier runs so they do not compete with this run's category
+for old in $(q "SELECT id FROM categories WHERE slug LIKE 'startups-%' AND status='active'"); do api POST /v1/admin/categories/$old/archive >/dev/null; done
+CAT=$(api POST /v1/admin/categories "{\"slug\":\"startups-$RUN\",\"names\":{\"ro\":\"Startup-uri $RUN\",\"ru\":\"Стартапы $RUN\",\"en\":\"Startups $RUN\"},\"classification_hints\":[\"startup-uri\",\"centru de tehnologie\",\"стартап\"],\"status\":\"active\"}")
+jq -c '{slug, status}' <<<"$CAT"
 PUB=$(api POST /v1/admin/publishers "{\"name\":\"Verificare $RUN\",\"canonical_domain\":\"diverse-exemplu.md\",\"publisher_type\":\"newsroom\",\"primary_languages\":[\"ro\"]}" | jq -r '.id // empty')
 if [[ -z $PUB ]]; then PUB=$(api GET "/v1/admin/publishers?q=diverse-exemplu.md" | jq -r '.items[0].id'); fi
 api PUT /v1/admin/publishers/$PUB/permissions '{"legal_basis":"synthetic fixture","permission_status":"granted","allow_crawl":true,"allow_store_full_text":true,"allow_summarize":true,"allow_embed":true,"allow_snippets":true,"robots_review_status":"compliant","terms_review_status":"compliant","attribution_text":"Sursa: fixture"}' >/dev/null
@@ -46,6 +49,9 @@ echo "== 3. edit and disable the source"
 api PATCH /v1/admin/sources/$EP '{"poll_interval_seconds":1800}' | jq -c '{poll_interval_seconds}'
 api POST /v1/admin/sources/$EP/disable | jq -c '{status}'
 [[ $(api POST /v1/admin/sources/$EP/crawl | jq -r .code) != null ]] && echo "  ok: crawling a disabled source is refused" || echo "  note: manual crawl of a disabled source accepted"
+
+echo "== archive the test category"
+api POST /v1/admin/categories/$(jq -r .id <<<"$CAT")/archive | jq -c '{slug, status}'
 
 echo "== restore the original classification route"
 R=$(api GET /v1/admin/ai/routes | jq -c '.items[] | select(.task=="category_classification" and .mode=="production")')

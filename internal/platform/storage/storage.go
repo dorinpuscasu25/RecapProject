@@ -64,6 +64,7 @@ func (f *Filesystem) Put(_ context.Context, key string, data []byte, _ string) e
 		return err
 	}
 	tmp := p + ".tmp"
+	// #nosec G306 -- 0640 is intended for stored objects
 	if err := os.WriteFile(tmp, data, 0o640); err != nil {
 		return err
 	}
@@ -75,7 +76,7 @@ func (f *Filesystem) Get(_ context.Context, key string) (io.ReadCloser, int64, e
 	if err != nil {
 		return nil, 0, err
 	}
-	fh, err := os.Open(p)
+	fh, err := os.Open(p) // #nosec G304 -- path() confines keys to the storage root
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, 0, ErrNotFound
 	}
@@ -103,14 +104,25 @@ func (f *Filesystem) PresignGet(context.Context, string, time.Duration) (string,
 
 // S3 stores objects in an S3-compatible bucket (MinIO locally).
 type S3 struct {
-	c      *minio.Client
-	bucket string
+	c       *minio.Client
+	presign *minio.Client // signs URLs for the public endpoint; same as c when there is none
+	bucket  string
 }
 
-func NewS3(ctx context.Context, endpoint, access, secret, bucket, region string, useSSL bool) (*S3, error) {
-	c, err := minio.New(endpoint, &minio.Options{Creds: credentials.NewStaticV4(access, secret, ""), Secure: useSSL, Region: region})
+// NewS3 connects to endpoint. publicEndpoint, when set, is the address clients use (for example
+// localhost:8333 while the services reach storage as s3:8333); presigned URLs are signed for it.
+func NewS3(ctx context.Context, endpoint, access, secret, bucket, region string, useSSL bool, publicEndpoint string) (*S3, error) {
+	opts := &minio.Options{Creds: credentials.NewStaticV4(access, secret, ""), Secure: useSSL, Region: region}
+	c, err := minio.New(endpoint, opts)
 	if err != nil {
 		return nil, err
+	}
+	presign := c
+	if publicEndpoint != "" && publicEndpoint != endpoint {
+		// Presigning is computed locally (the region is fixed), so this client never dials.
+		if presign, err = minio.New(publicEndpoint, opts); err != nil {
+			return nil, fmt.Errorf("S3_PUBLIC_ENDPOINT: %w", err)
+		}
 	}
 	ok, err := c.BucketExists(ctx, bucket)
 	if err != nil {
@@ -121,7 +133,7 @@ func NewS3(ctx context.Context, endpoint, access, secret, bucket, region string,
 			return nil, fmt.Errorf("create bucket: %w", err)
 		}
 	}
-	return &S3{c: c, bucket: bucket}, nil
+	return &S3{c: c, presign: presign, bucket: bucket}, nil
 }
 
 func (s *S3) Driver() string { return "s3" }
@@ -155,7 +167,7 @@ func (s *S3) Delete(ctx context.Context, key string) error {
 }
 
 func (s *S3) PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error) {
-	u, err := s.c.PresignedGetObject(ctx, s.bucket, key, ttl, url.Values{})
+	u, err := s.presign.PresignedGetObject(ctx, s.bucket, key, ttl, url.Values{})
 	if err != nil {
 		return "", err
 	}

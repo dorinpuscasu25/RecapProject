@@ -216,7 +216,7 @@ func (s *Service) PutSchedule(ctx context.Context, user uuid.UUID, name string, 
 	}
 	wd := make([]int32, len(in.Weekdays))
 	for i, d := range in.Weekdays {
-		wd[i] = int32(d)
+		wd[i] = int32(d) // #nosec G115 -- validated 1..7
 	}
 	cats := in.CategoryIDs
 	if cats == nil {

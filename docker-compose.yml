@@ -26,6 +26,7 @@ x-app: &app
     S3_SECRET_KEY: newsintel-dev-secret
     S3_BUCKET: newsintel
     S3_USE_SSL: "false"
+    S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-localhost:8333}
     MAIL_DRIVER: smtp
     SMTP_HOST: mailpit
     SMTP_PORT: "1025"

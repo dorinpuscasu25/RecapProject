@@ -100,7 +100,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts Options
 	case opts.Store != nil:
 		a.Store = opts.Store
 	case cfg.StorageDriver == "s3":
-		s3, err := storage.NewS3(ctx, cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Bucket, cfg.S3Region, cfg.S3UseSSL)
+		s3, err := storage.NewS3(ctx, cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Bucket, cfg.S3Region, cfg.S3UseSSL, cfg.S3PublicEndpoint)
 		if err != nil {
 			return nil, fmt.Errorf("object storage: %w", err)
 		}
@@ -120,6 +120,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts Options
 
 	policy := ssrf.Policy{AllowPrivate: cfg.CrawlAllowPrivate}
 	a.Identity = identity.NewService(d, cfg.Auth, a.Sealer, a.Limiter, log)
+	a.Identity.SetStore(a.Store)
 	a.Taxonomy = taxonomy.NewService(d)
 	a.Sources = sources.NewService(d, policy)
 	fetcher := ingest.NewFetcher(policy, cfg.CrawlUserAgent, cfg.FixtureDir, a.Limiter, cfg.CrawlLiveEnabled)

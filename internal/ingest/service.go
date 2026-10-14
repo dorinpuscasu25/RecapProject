@@ -648,7 +648,7 @@ type PersistResult struct {
 func (s *Service) PersistArticle(ctx context.Context, tx pgx.Tx, c *Candidate) (*PersistResult, error) {
 	urlHash := crypto.SHA256([]byte(c.CanonicalURL))
 	textHash := nlp.ContentHash(c.Title, c.Text)
-	sim := int64(nlp.SimHash(c.Title + " " + c.Text))
+	sim := int64(nlp.SimHash(c.Title + " " + c.Text)) // #nosec G115 -- bit pattern stored as bigint
 	perm := c.Permission
 	storeText := perm != nil && perm.AllowStoreFullText
 	body := c.Text

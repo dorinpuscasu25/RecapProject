@@ -299,6 +299,7 @@ func SimHash(text string) uint64 {
 		h.Write([]byte(s))
 		x := h.Sum64()
 		for i := 0; i < 64; i++ {
+			// #nosec G115 -- i in [0,64)
 			if x&(1<<uint(i)) != 0 {
 				v[i]++
 			} else {
@@ -335,7 +336,7 @@ func HashEmbed(text string, dims int) []float32 {
 		h := fnv.New64a()
 		h.Write([]byte(feat))
 		x := h.Sum64()
-		idx := int(x % uint64(dims))
+		idx := int(x % uint64(dims)) // #nosec G115 -- result < dims
 		sign := 1.0
 		if (x>>63)&1 == 1 {
 			sign = -1.0

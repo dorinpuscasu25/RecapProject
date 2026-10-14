@@ -273,7 +273,9 @@ func Operations() []Op {
 		{Method: "POST", Path: "/v1/users/me/email-change", Tag: "Account", Summary: "Start an email change (code sent to the new address)", Access: Self, Req: identity.EmailChangeInput{}, Resp: Accepted{}, Status: 202},
 		{Method: "POST", Path: "/v1/users/me/email-change/confirm", Tag: "Account", Summary: "Confirm an email change", Access: Self, Req: identity.EmailChangeConfirmInput{}, Resp: identity.User{}},
 		{Method: "POST", Path: "/v1/users/me/data-export", Tag: "Account", Summary: "Request a personal data export", Access: Self, Resp: ret((*identity.Service).RequestExport), Status: 202},
-		{Method: "GET", Path: "/v1/users/me/data-requests", Tag: "Account", Summary: "Export/deletion requests", Access: Self, Resp: elem((*identity.Service).ListDataRequests), List: true},
+		{Method: "GET", Path: "/v1/users/me/data-requests", Tag: "Account", Summary: "Export/deletion requests", Access: Self, Resp: elem((*identity.Service).ListDataRequests), List: true,
+			Notes: "Completed exports carry download_url: a presigned object-storage URL (url_expires_at) or the authenticated download endpoint."},
+		{Method: "GET", Path: "/v1/users/me/data-requests/{id}/download", Tag: "Account", Summary: "Download a completed personal data export (owner only)", Access: Self, Resp: "json-file", Conflict: true},
 		{Method: "POST", Path: "/v1/users/me/deletion", Tag: "Account", Summary: "Request account deletion", Access: Self, Req: identity.DeletionInput{}, Resp: ret((*identity.Service).RequestDeletion), Status: 202},
 
 		// ---- consumer: taxonomy, events, search ----

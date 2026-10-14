@@ -585,6 +585,7 @@ func (g *Gateway) maybeShadow(task Task, input any, schema map[string]any, o Cal
 		return
 	}
 	r := s.routes[string(task)+"|shadow"]
+	// #nosec G404 -- shadow sampling, not security sensitive
 	if r == nil || len(r.Chain) == 0 || rand.Float64() >= r.SampleRate {
 		return
 	}

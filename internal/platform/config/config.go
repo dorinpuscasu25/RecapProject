@@ -48,7 +48,10 @@ type Config struct {
 	S3Bucket      string
 	S3UseSSL      bool
 	S3Region      string
-	StorageURLTTL time.Duration
+	// S3PublicEndpoint is the host:port clients use to reach storage; presigned URLs are signed
+	// for it. Empty means S3Endpoint.
+	S3PublicEndpoint string
+	StorageURLTTL    time.Duration
 
 	Auth AuthConfig
 
@@ -114,6 +117,7 @@ func (c *Config) IsDevelopment() bool { return c.Env == "development" }
 
 // Load reads configuration from the environment and validates it.
 func Load() (*Config, error) {
+	var rangeErrs []error
 	c := &Config{
 		Env:           env("APP_ENV", "development"),
 		ServiceName:   env("SERVICE_NAME", "newsintel"),
@@ -124,7 +128,7 @@ func Load() (*Config, error) {
 		MaxBodyBytes:  int64(intEnv("HTTP_MAX_BODY_BYTES", 1<<20)),
 
 		DatabaseURL:   env("DATABASE_URL", ""),
-		DBMaxConns:    int32(intEnv("DB_MAX_CONNS", 20)),
+		DBMaxConns:    int32(boundedIntEnv("DB_MAX_CONNS", 20, 1, 1000, &rangeErrs)), // #nosec G115 -- bounded
 		RedisURL:      env("REDIS_URL", ""),
 		BusDriver:     env("BUS_DRIVER", "postgres"),
 		KafkaBrokers:  list("KAFKA_BROKERS", ""),
@@ -138,15 +142,16 @@ func Load() (*Config, error) {
 		QdrantAPIKey:       env("QDRANT_API_KEY", ""),
 		QdrantPrefix:       env("QDRANT_COLLECTION_PREFIX", "newsintel_"),
 
-		StorageDriver: env("STORAGE_DRIVER", "filesystem"),
-		StorageDir:    env("STORAGE_DIR", "./var/storage"),
-		S3Endpoint:    env("S3_ENDPOINT", ""),
-		S3AccessKey:   env("S3_ACCESS_KEY", ""),
-		S3SecretKey:   env("S3_SECRET_KEY", ""),
-		S3Bucket:      env("S3_BUCKET", "newsintel"),
-		S3UseSSL:      boolEnv("S3_USE_SSL", false),
-		S3Region:      env("S3_REGION", "us-east-1"),
-		StorageURLTTL: durEnv("STORAGE_URL_TTL", 5*time.Minute),
+		StorageDriver:    env("STORAGE_DRIVER", "filesystem"),
+		StorageDir:       env("STORAGE_DIR", "./var/storage"),
+		S3Endpoint:       env("S3_ENDPOINT", ""),
+		S3AccessKey:      env("S3_ACCESS_KEY", ""),
+		S3SecretKey:      env("S3_SECRET_KEY", ""),
+		S3Bucket:         env("S3_BUCKET", "newsintel"),
+		S3UseSSL:         boolEnv("S3_USE_SSL", false),
+		S3Region:         env("S3_REGION", "us-east-1"),
+		S3PublicEndpoint: env("S3_PUBLIC_ENDPOINT", ""),
+		StorageURLTTL:    durEnv("STORAGE_URL_TTL", 5*time.Minute),
 
 		MailDriver:   env("MAIL_DRIVER", "devsink"),
 		MailFrom:     env("MAIL_FROM", "News Intelligence <no-reply@localhost>"),
@@ -191,13 +196,13 @@ func Load() (*Config, error) {
 		ResendMinInterval:  durEnv("AUTH_RESEND_MIN_INTERVAL", 60*time.Second),
 		ResendHourlyCap:    intEnv("AUTH_RESEND_HOURLY_CAP", 5),
 		ResetTTL:           durEnv("AUTH_RESET_TTL", 30*time.Minute),
-		Argon2MemoryKiB:    uint32(intEnv("AUTH_ARGON2_MEMORY_KIB", 64*1024)),
-		Argon2Iterations:   uint32(intEnv("AUTH_ARGON2_ITERATIONS", 3)),
-		Argon2Parallelism:  uint8(intEnv("AUTH_ARGON2_PARALLELISM", 2)),
+		Argon2MemoryKiB:    uint32(boundedIntEnv("AUTH_ARGON2_MEMORY_KIB", 64*1024, 1024, 4*1024*1024, &rangeErrs)), // #nosec G115 -- bounded
+		Argon2Iterations:   uint32(boundedIntEnv("AUTH_ARGON2_ITERATIONS", 3, 1, 100, &rangeErrs)),                  // #nosec G115 -- bounded
+		Argon2Parallelism:  uint8(boundedIntEnv("AUTH_ARGON2_PARALLELISM", 2, 1, 64, &rangeErrs)),                   // #nosec G115 -- bounded
 		TermsPolicyVersion: env("TERMS_POLICY_VERSION", "2026-10-01"),
 	}
 
-	var errs []error
+	errs := rangeErrs
 	if c.DatabaseURL == "" {
 		errs = append(errs, errors.New("DATABASE_URL is required"))
 	}
@@ -249,6 +254,9 @@ func Load() (*Config, error) {
 	}
 	if c.IsProduction() && c.CrawlAllowPrivate {
 		errs = append(errs, errors.New("CRAWL_ALLOW_PRIVATE_NETWORKS must not be enabled in production"))
+	}
+	if c.IsProduction() && c.Auth.Argon2MemoryKiB < 19*1024 {
+		errs = append(errs, errors.New("AUTH_ARGON2_MEMORY_KIB must be at least 19456 in production (OWASP minimum)"))
 	}
 	if c.IsProduction() && c.QdrantURL == "" {
 		errs = append(errs, errors.New("QDRANT_URL is required in production (in-memory vectors are for development only)"))
@@ -323,6 +331,17 @@ func intEnv(k string, def int) int {
 		}
 	}
 	return def
+}
+
+// boundedIntEnv reads an integer and reports values outside [lo, hi] instead of letting them
+// wrap when narrowed to a smaller type.
+func boundedIntEnv(k string, def, lo, hi int, errs *[]error) int {
+	n := intEnv(k, def)
+	if n < lo || n > hi {
+		*errs = append(*errs, fmt.Errorf("%s must be between %d and %d, got %d", k, lo, hi, n))
+		return def
+	}
+	return n
 }
 
 func boolEnv(k string, def bool) bool {

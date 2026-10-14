@@ -172,6 +172,8 @@ func Build() map[string]any {
 			resps["204"] = map[string]any{"description": "No content"}
 		case op.Resp == "audio":
 			resps["200"] = map[string]any{"description": "Audio bytes", "content": map[string]any{"audio/mpeg": map[string]any{"schema": map[string]any{"type": "string", "format": "binary"}}}}
+		case op.Resp == "json-file":
+			resps["200"] = map[string]any{"description": "JSON file attachment", "content": map[string]any{"application/json": map[string]any{"schema": map[string]any{"type": "object", "additionalProperties": true}}}}
 		case op.Resp == nil:
 			resps[fmt.Sprint(status)] = map[string]any{"description": "OK", "content": map[string]any{"application/yaml": map[string]any{"schema": map[string]any{"type": "string"}}}}
 		default:

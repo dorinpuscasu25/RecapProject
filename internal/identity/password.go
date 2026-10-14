@@ -63,7 +63,7 @@ func VerifyPassword(pw, encoded string, current Argon2Params) (ok, needsRehash b
 	if err != nil {
 		return false, false, errBadHash
 	}
-	got := argon2.IDKey([]byte(pw), salt, t, m, p, uint32(len(want)))
+	got := argon2.IDKey([]byte(pw), salt, t, m, p, uint32(len(want))) // #nosec G115 -- hash length is 32
 	ok = subtle.ConstantTimeCompare(got, want) == 1
 	needsRehash = m < current.MemoryKiB || t < current.Iterations || p < current.Parallelism
 	return ok, needsRehash, nil

@@ -1,7 +1,9 @@
 package identity
 
 import (
+	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -50,6 +52,7 @@ func (h *Handler) AuthedRoutes(r chi.Router) {
 	r.Post("/users/me/email-change/confirm", h.emailChangeConfirm)
 	r.Post("/users/me/data-export", h.export)
 	r.Get("/users/me/data-requests", h.dataRequests)
+	r.Get("/users/me/data-requests/{id}/download", h.downloadExport)
 	r.Post("/users/me/deletion", h.deletion)
 }
 
@@ -282,6 +285,27 @@ func (h *Handler) dataRequests(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": list})
+}
+
+func (h *Handler) downloadExport(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		httpx.WriteError(w, r, apperr.NotFound("data_request_not_found", "Data request not found."))
+		return
+	}
+	rc, n, err := h.Svc.OpenExport(r.Context(), principal.From(r.Context()), id)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	defer rc.Close()
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", `attachment; filename="recap-export-`+id.String()+`.json"`)
+	w.Header().Set("Cache-Control", "private, no-store")
+	if n > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(n, 10))
+	}
+	_, _ = io.Copy(w, rc)
 }
 
 func (h *Handler) deletion(w http.ResponseWriter, r *http.Request) {

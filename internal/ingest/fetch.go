@@ -249,7 +249,7 @@ func (f *Fetcher) fetchFixture(raw string, maxBytes int64) (*FetchResult, error)
 	if !strings.HasPrefix(full, root+string(filepath.Separator)) {
 		return nil, fmt.Errorf("fixture path escapes fixture dir")
 	}
-	b, err := os.ReadFile(full)
+	b, err := os.ReadFile(full) // #nosec G304 -- checked to stay inside FixtureDir above
 	if errors.Is(err, os.ErrNotExist) {
 		return &FetchResult{URL: raw, FinalURL: raw, Status: 404, FromFixture: true}, &PermanentHTTPError{Status: 404, Reason: "fixture not found"}
 	}

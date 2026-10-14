@@ -22,6 +22,7 @@ import (
 	"github.com/dorinpuscasu25/recapproject/internal/platform/ids"
 	"github.com/dorinpuscasu25/recapproject/internal/platform/principal"
 	"github.com/dorinpuscasu25/recapproject/internal/platform/ratelimit"
+	"github.com/dorinpuscasu25/recapproject/internal/platform/storage"
 )
 
 type Service struct {
@@ -39,7 +40,12 @@ type Service struct {
 	permAt    time.Time
 
 	dummyHash string // used to equalize timing for unknown accounts
+
+	store storage.Store // personal data exports; nil disables downloads
 }
+
+// SetStore enables downloads of personal data exports from object storage.
+func (s *Service) SetStore(st storage.Store) { s.store = st }
 
 func NewService(d *db.DB, cfg config.AuthConfig, sealer *crypto.Sealer, limiter ratelimit.Limiter, log *slog.Logger) *Service {
 	argon := Argon2Params{MemoryKiB: cfg.Argon2MemoryKiB, Iterations: cfg.Argon2Iterations, Parallelism: cfg.Argon2Parallelism}
