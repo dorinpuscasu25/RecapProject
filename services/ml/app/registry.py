@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from dataclasses import dataclass, field
 
 from .backends.base import EmbeddingBackend, EntityBackend, RerankBackend
@@ -22,9 +23,22 @@ class Registry:
     loaded: set[str] = field(default_factory=set)
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
-    def load_all(self) -> None:
+    def load_all(self, retry: bool = False, max_wait: float = 300.0) -> None:
+        """Loads every configured backend. With retry, failed loads (for example an interrupted
+        model download) are retried with exponential backoff until they succeed; errors stay
+        visible on /readyz meanwhile."""
+        delay = 10.0
+        while True:
+            self._load_pending()
+            if not retry or self.ready():
+                return
+            log.warning("model load incomplete (%s); retrying in %.0fs", ", ".join(sorted(self.errors)), delay)
+            time.sleep(delay)
+            delay = min(delay * 2, max_wait)
+
+    def _load_pending(self) -> None:
         for kind, backend in (("embeddings", self.embedder), ("rerank", self.reranker), ("entities", self.entities)):
-            if backend is None:
+            if backend is None or kind in self.loaded:
                 continue
             try:
                 backend.load()

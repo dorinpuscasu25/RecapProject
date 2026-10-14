@@ -77,7 +77,7 @@ def create_app(settings: Settings | None = None, registry: Registry | None = Non
         if settings.preload:
             # Load in the background: the process answers /healthz immediately and /readyz turns 200
             # once models are in memory (first start downloads weights into the cache volume).
-            threading.Thread(target=reg.load_all, name="model-loader", daemon=True).start()
+            threading.Thread(target=reg.load_all, kwargs={"retry": True}, name="model-loader", daemon=True).start()
         yield
 
     app = FastAPI(title="newsintel-ml", version="0.1.0", lifespan=lifespan)

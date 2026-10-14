@@ -127,12 +127,13 @@ services:
     volumes: [mlmodels:/models]
     restart: unless-stopped
     healthcheck:
-      # Ready only when models are loaded (first start downloads ~2.5 GB of weights).
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/readyz',timeout=3).status==200 else 1)"]
+      # Healthy = the process answers. Model readiness is reported on /readyz (the first start
+      # downloads a few GB); the gateway defers embeddings until then, so nothing waits on it.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz',timeout=3).status==200 else 1)"]
       interval: 15s
       timeout: 5s
-      retries: 120
-      start_period: 60s
+      retries: 5
+      start_period: 30s
 
   # One-shot: migrations, seed (AI registry incl. the ML service, taxonomy), optional admin and
   # synthetic fixture sources. Safe to re-run.
@@ -173,7 +174,7 @@ services:
       qdrant: { condition: service_healthy }
       redis: { condition: service_healthy }
       s3: { condition: service_healthy }
-      ml: { condition: service_healthy }
+      ml: { condition: service_started }
 
 volumes:
   pgdata:
