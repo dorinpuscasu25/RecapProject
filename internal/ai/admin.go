@@ -168,6 +168,7 @@ func (a *Admin) UpsertProvider(ctx context.Context, id *uuid.UUID, in ProviderIn
 		return nil, err
 	}
 	a.GW.Invalidate()
+	_ = db.NotifyConfig(ctx, a.DB.Pool, "ai") // other processes (workers, API replicas)
 	list, err := a.ListProviders(ctx)
 	if err != nil {
 		return nil, err
@@ -307,6 +308,7 @@ func (a *Admin) UpsertModel(ctx context.Context, id *uuid.UUID, in ModelInput) (
 		return nil, err
 	}
 	a.GW.Invalidate()
+	_ = db.NotifyConfig(ctx, a.DB.Pool, "ai") // other processes (workers, API replicas)
 	list, err := a.ListModels(ctx)
 	if err != nil {
 		return nil, err
@@ -520,6 +522,7 @@ func (a *Admin) UpsertRoute(ctx context.Context, id *uuid.UUID, in RouteInput) (
 		return nil, err
 	}
 	a.GW.Invalidate()
+	_ = db.NotifyConfig(ctx, a.DB.Pool, "ai") // other processes (workers, API replicas)
 	return &out, nil
 }
 
@@ -613,6 +616,7 @@ func (a *Admin) CreatePromptVersion(ctx context.Context, in PromptInput) (*Promp
 		return nil, err
 	}
 	a.GW.Invalidate()
+	_ = db.NotifyConfig(ctx, a.DB.Pool, "ai") // other processes (workers, API replicas)
 	return &out, nil
 }
 

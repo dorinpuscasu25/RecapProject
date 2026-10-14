@@ -624,6 +624,7 @@ func (s *Service) SetRoles(ctx context.Context, actor *principal.Principal, user
 		return nil, err
 	}
 	InvalidateAllSessionCache()
+	_ = db.NotifyConfig(ctx, s.db.Pool, "identity")
 	return s.GetUser(ctx, userID)
 }
 
@@ -655,6 +656,7 @@ func (s *Service) SetStatus(ctx context.Context, actor *principal.Principal, use
 			Old: map[string]any{"status": cur.Status}, New: map[string]any{"status": status, "reason": reason}})
 	})
 	InvalidateAllSessionCache()
+	_ = db.NotifyConfig(ctx, s.db.Pool, "identity")
 	return err
 }
 
@@ -677,6 +679,7 @@ func (s *Service) BootstrapSuperAdmin(ctx context.Context, email string) (*User,
 		return nil, err
 	}
 	InvalidateAllSessionCache()
+	_ = db.NotifyConfig(ctx, s.db.Pool, "identity")
 	return s.GetUser(ctx, u.ID)
 }
 
@@ -744,5 +747,6 @@ func (s *Service) CreateOperatorAdmin(ctx context.Context, email, password, phon
 		return nil, err
 	}
 	InvalidateAllSessionCache()
+	_ = db.NotifyConfig(ctx, s.db.Pool, "identity")
 	return s.GetUser(ctx, id)
 }

@@ -100,6 +100,9 @@ func (s *Store) Put(ctx context.Context, key string, value json.RawMessage, vers
 			RETURNING key, value, description, version, updated_at`, key, value, by).Scan(&out.Key, &out.Value, &out.Description, &out.Version, &out.UpdatedAt); err != nil {
 			return err
 		}
+		if err := db.NotifyConfig(ctx, tx, "policy"); err != nil {
+			return err
+		}
 		return audit.Record(ctx, tx, audit.Entry{Action: "policy.update", ResourceType: "policy", ResourceID: key, Old: map[string]any{"value": old}, New: map[string]any{"value": value}})
 	})
 	s.mu.Lock()
@@ -149,6 +152,13 @@ func (s *Store) Flags(ctx context.Context) ([]Flag, error) {
 		err := r.Scan(&f.Key, &f.Enabled, &f.RolloutPercent, &f.Description, &f.UpdatedAt)
 		return f, err
 	})
+}
+
+// Invalidate drops cached policies (called on cross-process change notifications).
+func (s *Store) Invalidate() {
+	s.mu.Lock()
+	s.c = map[string]cached{}
+	s.mu.Unlock()
 }
 
 func (s *Store) SetFlag(ctx context.Context, key string, enabled bool, pct int) error {

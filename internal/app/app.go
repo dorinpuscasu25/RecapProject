@@ -50,6 +50,9 @@ type App struct {
 	Analytics *analytics.Recorder
 	langfuse  *ai.Langfuse
 
+	stopListen context.CancelFunc
+	listenDone chan struct{}
+
 	mods *modules
 	api  *api.API
 }
@@ -144,13 +147,37 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts Options
 		a.langfuse = ai.NewLangfuse(cfg.LangfuseHost, cfg.LangfusePublic, cfg.LangfuseSecret, log)
 		a.mods.AI.SetObserver(a.langfuse)
 	}
+	// Admin changes made in any process (API replicas, CLI) reach every process immediately.
+	lctx, cancel := context.WithCancel(context.Background())
+	a.stopListen, a.listenDone = cancel, make(chan struct{})
+	go func() {
+		defer close(a.listenDone)
+		d.ListenConfig(lctx, log, a.applyConfigChange)
+	}()
 	a.api = &api.API{Cfg: cfg, DB: d, Log: log, Identity: a.Identity, Taxonomy: a.Taxonomy, Sources: a.Sources, Ingest: a.Ingest,
 		Policy: a.mods.Policy, AI: a.mods.AI, Search: a.mods.Search, Enrich: a.mods.Enrich, Events: a.mods.Events, Analytics: a.Analytics}
 	a.mods.wireAPI(a.api)
 	return a, nil
 }
 
+// applyConfigChange invalidates caches for a changed configuration scope ("*" = everything).
+func (a *App) applyConfigChange(scope string) {
+	if scope == "ai" || scope == "*" {
+		a.mods.AI.Invalidate()
+	}
+	if scope == "policy" || scope == "*" {
+		a.mods.Policy.Invalidate()
+	}
+	if scope == "identity" || scope == "*" {
+		identity.InvalidateAllSessionCache()
+	}
+}
+
 func (a *App) Close() {
+	if a.stopListen != nil {
+		a.stopListen()
+		<-a.listenDone
+	}
 	a.Analytics.Close()
 	if a.langfuse != nil {
 		a.langfuse.Close()

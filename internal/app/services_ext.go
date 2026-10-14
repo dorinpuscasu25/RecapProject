@@ -13,6 +13,7 @@ import (
 	"github.com/dorinpuscasu25/recapproject/internal/jobs"
 	"github.com/dorinpuscasu25/recapproject/internal/notifications"
 	"github.com/dorinpuscasu25/recapproject/internal/platform/bus"
+	"github.com/dorinpuscasu25/recapproject/internal/policy"
 )
 
 // experienceExt wires briefings/audio, grounded chat and notifications. It is registered after
@@ -91,3 +92,6 @@ func (a *App) AIGateway() *ai.Gateway { return a.mods.AI }
 
 // NotificationService exposes the notification module (scheduler tooling and tests).
 func (a *App) NotificationService() *notifications.Service { return a.mods.Notifications }
+
+// PolicyStore exposes the editorial policy store (operational tooling and tests).
+func (a *App) PolicyStore() *policy.Store { return a.mods.Policy }
