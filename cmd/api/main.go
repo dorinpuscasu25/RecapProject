@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	_ "time/tzdata" // IANA zones (Europe/Chisinau) without OS tzdata
 
 	"github.com/dorinpuscasu25/recapproject/internal/api"
 	"github.com/dorinpuscasu25/recapproject/internal/app"

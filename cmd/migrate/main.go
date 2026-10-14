@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"time"
+	_ "time/tzdata" // IANA zones (Europe/Chisinau) without OS tzdata
 
 	"github.com/dorinpuscasu25/recapproject/internal/platform/db"
 )

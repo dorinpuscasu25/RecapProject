@@ -23,9 +23,20 @@ call GET /v1/feed | show '{status, code}'
 
 echo "== register → code from the dev mailbox → verify"
 call POST /v1/auth/register "{\"first_name\":\"Demo\",\"last_name\":\"User\",\"email\":\"$EMAIL\",\"phone\":\"069123456\",\"password\":\"$PASS\",\"accept_terms\":true,\"accept_privacy\":true,\"locale\":\"ro\"}" | show .
+MAILPIT=${MAILPIT:-http://localhost:8025}
+latest_code() { # dev mail sink (MAIL_DRIVER=devsink) or Mailpit (docker compose, MAIL_DRIVER=smtp)
+  local body
+  body=$(curl -s "$BASE/v1/dev/mailbox?to=$EMAIL" | jq -r '.items[0].body // empty' 2>/dev/null || true)
+  if [[ -z $body ]]; then
+    local id
+    id=$(curl -s "$MAILPIT/api/v1/search?query=to:$EMAIL" | jq -r '.messages[0].ID // empty' 2>/dev/null || true)
+    [[ -n $id ]] && body=$(curl -s "$MAILPIT/api/v1/message/$id" | jq -r '.Text // empty')
+  fi
+  grep -oE '\b[0-9]{6}\b' <<<"$body" | head -1 || true
+}
 CODE=""
-for _ in $(seq 1 20); do # mail is delivered by the worker (`make worker`)
-  CODE=$(call GET "/v1/dev/mailbox?to=$EMAIL" 2>/dev/null | jq -r '.items[0].body // empty' | grep -oE '\b[0-9]{6}\b' | head -1 || true)
+for _ in $(seq 1 30); do # mail is delivered by the worker
+  CODE=$(latest_code)
   [[ -n $CODE ]] && break
   sleep 1
 done

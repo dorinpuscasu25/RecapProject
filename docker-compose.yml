@@ -1,30 +1,60 @@
-# Local development infrastructure only (no application containers, no deployment).
-# Start:  docker compose up -d     Stop: docker compose down     Reset data: docker compose down -v
+# Complete local development stack: infrastructure + Go API + Go worker + Python ML service.
+#
+#   ./scripts/setup.sh        # once: creates .env with generated secrets
+#   docker compose up -d      # builds images, migrates, seeds, starts everything
+#
+# API http://localhost:8080 · ML http://localhost:8000 · Mailpit http://localhost:8025 ·
+# S3 http://localhost:8333 · OpenSearch http://localhost:9200 · Qdrant http://localhost:6333
+# Production deployment is out of scope; this file is for development and evaluation.
 name: newsintel
+
+x-app: &app
+  image: newsintel/backend:dev
+  build: { context: ., dockerfile: Dockerfile }
+  env_file: [.env]
+  environment: &app-env
+    APP_ENV: ${APP_ENV:-development}
+    DATABASE_URL: postgres://newsintel:newsintel@postgres:5432/newsintel?sslmode=disable
+    BUS_DRIVER: kafka
+    KAFKA_BROKERS: kafka:19092
+    OPENSEARCH_URL: http://opensearch:9200
+    QDRANT_URL: http://qdrant:6333
+    REDIS_URL: redis://redis:6379/0
+    STORAGE_DRIVER: s3
+    S3_ENDPOINT: s3:8333
+    S3_ACCESS_KEY: newsintel
+    S3_SECRET_KEY: newsintel-dev-secret
+    S3_BUCKET: newsintel
+    S3_USE_SSL: "false"
+    MAIL_DRIVER: smtp
+    SMTP_HOST: mailpit
+    SMTP_PORT: "1025"
+    SMTP_STARTTLS: "false"
+    ML_SERVICE_URL: http://ml:8000
+    FIXTURE_DIR: /app/fixtures
+    SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:?run ./scripts/setup.sh to generate .env}
+    AUTH_CODE_HMAC_SECRET: ${AUTH_CODE_HMAC_SECRET:?run ./scripts/setup.sh to generate .env}
+    AUTH_SIGNING_KEYS: ${AUTH_SIGNING_KEYS:?run ./scripts/setup.sh to generate .env}
+  restart: unless-stopped
 
 services:
   postgres:
     image: postgres:16.4
-    environment:
-      POSTGRES_USER: newsintel
-      POSTGRES_PASSWORD: newsintel
-      POSTGRES_DB: newsintel
+    environment: { POSTGRES_USER: newsintel, POSTGRES_PASSWORD: newsintel, POSTGRES_DB: newsintel }
     ports: ["5432:5432"]
     volumes: [pgdata:/var/lib/postgresql/data]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U newsintel"]
-      interval: 5s
-      retries: 20
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U newsintel"], interval: 5s, timeout: 3s, retries: 30 }
 
   kafka:
     image: apache/kafka:3.8.1
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_LISTENERS: INTERNAL://:19092,EXTERNAL://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:19092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
@@ -32,6 +62,12 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     ports: ["9092:9092"]
     volumes: [kafkadata:/var/lib/kafka/data]
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:19092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
 
   opensearch:
     image: opensearchproject/opensearch:2.17.1
@@ -43,32 +79,104 @@ services:
       cluster.routing.allocation.disk.threshold_enabled: "false"
     ports: ["9200:9200"]
     volumes: [osdata:/usr/share/opensearch/data]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health?wait_for_status=yellow\\&timeout=5s >/dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
 
   qdrant:
     image: qdrant/qdrant:v1.12.4
     ports: ["6333:6333"]
     volumes: [qdrantdata:/qdrant/storage]
+    healthcheck: { test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333'"], interval: 5s, timeout: 3s, retries: 30 }
 
   redis:
     image: redis:7.4-alpine
     ports: ["6379:6379"]
+    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 5s, timeout: 3s, retries: 30 }
 
-  minio:
-    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
-    command: server /data --console-address :9001
-    environment:
-      MINIO_ROOT_USER: newsintel
-      MINIO_ROOT_PASSWORD: newsintel-dev-secret
-    ports: ["9000:9000", "9001:9001"]
-    volumes: [miniodata:/data]
+  # S3-compatible object storage (raw snapshots, audio). MinIO no longer publishes community
+  # images; SeaweedFS is used here. Any S3 endpoint works via S3_* settings.
+  s3:
+    image: chrislusf/seaweedfs:3.80
+    command: server -dir=/data -ip.bind=0.0.0.0 -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
+    ports: ["8333:8333"]
+    volumes: [s3data:/data, ./deploy/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro]
+    healthcheck: { test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8333/status || wget -q -S -O /dev/null http://127.0.0.1:8333/ 2>&1 | grep -q HTTP"], interval: 5s, timeout: 5s, retries: 40 }
 
   mailpit:
     image: axllent/mailpit:v1.20
     ports: ["1025:1025", "8025:8025"]
+
+  ml:
+    build: { context: services/ml }
+    image: newsintel/ml:dev
+    environment:
+      ML_EMBEDDING_BACKEND: ${ML_EMBEDDING_BACKEND:-fastembed}
+      ML_EMBEDDING_MODEL: ${ML_EMBEDDING_MODEL:-BAAI/bge-m3}
+      ML_EMBEDDING_DIMS: ${ML_EMBEDDING_DIMS:-1024}
+      ML_RERANK_BACKEND: ${ML_RERANK_BACKEND:-fastembed}
+      ML_RERANK_MODEL: ${ML_RERANK_MODEL:-jinaai/jina-reranker-v2-base-multilingual}
+      ML_API_KEY: ${ML_API_KEY:-}
+      HF_TOKEN: ${HF_TOKEN:-}
+    ports: ["8000:8000"]
+    volumes: [mlmodels:/models]
+    restart: unless-stopped
+    healthcheck:
+      # Ready only when models are loaded (first start downloads ~2.5 GB of weights).
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/readyz',timeout=3).status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 120
+      start_period: 60s
+
+  # One-shot: migrations, seed (AI registry incl. the ML service, taxonomy), optional admin and
+  # synthetic fixture sources. Safe to re-run.
+  init:
+    <<: *app
+    restart: "no"
+    command: ["sh", "/app/scripts/init.sh"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      s3: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  api:
+    <<: *app
+    command: ["api"]
+    ports: ["8080:8080", "9090:9090"]
+    depends_on:
+      init: { condition: service_completed_successfully }
+      opensearch: { condition: service_healthy }
+      qdrant: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      s3: { condition: service_healthy }
+      ml: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+
+  worker:
+    <<: *app
+    command: ["worker"]
+    ports: ["9091:9091"]
+    depends_on:
+      init: { condition: service_completed_successfully }
+      opensearch: { condition: service_healthy }
+      qdrant: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      s3: { condition: service_healthy }
+      ml: { condition: service_healthy }
 
 volumes:
   pgdata:
   kafkadata:
   osdata:
   qdrantdata:
-  miniodata:
+  s3data:
+  mlmodels:

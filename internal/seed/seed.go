@@ -130,6 +130,11 @@ func aiPlatform(ctx context.Context, tx pgx.Tx, mlURL string) error {
 	if err != nil {
 		return err
 	}
+	// Local providers run in-process or on our own hardware: remote-API style per-minute quotas
+	// (default 60) would throttle the pipeline. Only rows still on the default are adjusted.
+	if _, err := tx.Exec(ctx, `UPDATE ai_providers SET rate_limit_rpm=100000, max_concurrency=16 WHERE id=$1 AND rate_limit_rpm=60`, heur); err != nil {
+		return err
+	}
 	dims := ai.HashEmbeddingDims
 	rules, err := upsertModel(ctx, tx, heur, modelSeed{slug: "local-rules", name: "local-rules", version: "1", kind: "chat", structured: true, enabled: true, ctxWindow: 1 << 20, maxOut: 1 << 16})
 	if err != nil {
@@ -186,7 +191,9 @@ func aiPlatform(ctx context.Context, tx pgx.Tx, mlURL string) error {
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE ai_providers SET base_url=$2, enabled=true WHERE id=$1`, ml, base); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE ai_providers SET base_url=$2, enabled=true,
+			rate_limit_rpm=CASE WHEN rate_limit_rpm=60 THEN 6000 ELSE rate_limit_rpm END,
+			max_concurrency=CASE WHEN max_concurrency=4 THEN 8 ELSE max_concurrency END WHERE id=$1`, ml, base); err != nil {
 			return err
 		}
 		mlDims := 1024

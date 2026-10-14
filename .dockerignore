@@ -1,0 +1,6 @@
+.git
+var/
+services/ml/.venv
+**/__pycache__
+**/.pytest_cache
+*.test

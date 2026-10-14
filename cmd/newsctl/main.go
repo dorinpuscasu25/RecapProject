@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+	_ "time/tzdata" // IANA zones (Europe/Chisinau) without OS tzdata
 
 	"github.com/google/uuid"
 
@@ -35,6 +36,7 @@ const usage = `newsctl — operator CLI
 
   newsctl seed [-categories=true] [-entities=true]     idempotent reference data (policies, AI registry, taxonomy, gazetteer)
   newsctl bootstrap-admin -email ADDRESS                 grant super_admin to an existing verified account
+  newsctl create-admin -email A -password P -phone +373… create (or promote) a verified super_admin (fresh installs)
   newsctl ingest-fixtures [-manifest fixtures/sources.json] [-drain=true]
                                                          register the synthetic fixture sources and crawl them
   newsctl drain                                          process all pending messages, jobs and mail once (postgres bus)
@@ -124,6 +126,28 @@ func run(ctx context.Context, cmd string, args []string, log *slog.Logger) (int,
 			return 1, err
 		}
 		fmt.Printf("granted super_admin to %s (%s)\n", u.Email, u.ID)
+		return 0, nil
+
+	case "create-admin":
+		email := fs.String("email", os.Getenv("ADMIN_EMAIL"), "email")
+		password := fs.String("password", os.Getenv("ADMIN_PASSWORD"), "password (policy-checked)")
+		phone := fs.String("phone", os.Getenv("ADMIN_PHONE"), "phone in international format")
+		if err := fs.Parse(args); err != nil {
+			return 2, err
+		}
+		if *email == "" || *password == "" || *phone == "" {
+			return 2, errors.New("-email, -password and -phone are required (or ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_PHONE)")
+		}
+		a, err := open(ctx, log)
+		if err != nil {
+			return 1, err
+		}
+		defer a.Close()
+		u, err := a.Identity.CreateOperatorAdmin(ctx, *email, *password, *phone, "", "")
+		if err != nil {
+			return 1, err
+		}
+		fmt.Printf("super_admin ready: %s (%s)\n", u.Email, u.ID)
 		return 0, nil
 
 	case "ingest-fixtures":

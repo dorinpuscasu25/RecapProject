@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "newsintel",
+      "credentials": [{ "accessKey": "newsintel", "secretKey": "newsintel-dev-secret" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

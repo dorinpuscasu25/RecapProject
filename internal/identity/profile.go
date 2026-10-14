@@ -703,3 +703,46 @@ func (s *Service) CleanupExpired(ctx context.Context) (map[string]int64, error) 
 	}
 	return out, nil
 }
+
+// CreateOperatorAdmin creates (or promotes) a verified super_admin account. Operator CLI only
+// (`newsctl create-admin`), used to bootstrap a fresh installation without email round-trips.
+// The password must satisfy the normal password policy.
+func (s *Service) CreateOperatorAdmin(ctx context.Context, email, password, phone, first, last string) (*User, error) {
+	addr, norm, ok := NormalizeEmail(email)
+	if !ok {
+		return nil, apperr.ValidationMsg("bootstrap.invalid_email", "A valid email address is required.")
+	}
+	ph, ok := NormalizePhone(phone, "MD")
+	if !ok {
+		return nil, apperr.ValidationMsg("bootstrap.invalid_phone", "A valid phone number is required (e.g. +37369123456).")
+	}
+	if code, msg, ok := ValidatePassword(password, addr); !ok {
+		return nil, apperr.Validation(apperr.FieldError{Field: "password", Code: code, Message: msg})
+	}
+	if first == "" {
+		first = "Admin"
+	}
+	if last == "" {
+		last = "Operator"
+	}
+	hash := HashPassword(password, s.argon)
+	var id uuid.UUID
+	err := s.db.Tx(ctx, func(tx pgx.Tx) error {
+		err := tx.QueryRow(ctx, `INSERT INTO users (id, first_name, last_name, email, email_normalized, phone_e164, password_hash, status, email_verified_at, locale, timezone)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,'active',now(),'ro','Europe/Chisinau')
+			ON CONFLICT (email_normalized) DO UPDATE SET status='active', email_verified_at=COALESCE(users.email_verified_at, now())
+			RETURNING id`, ids.New(), first, last, addr, norm, ph, hash).Scan(&id)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO user_roles (user_id, role_code) VALUES ($1,'user'),($1,'super_admin') ON CONFLICT DO NOTHING`, id); err != nil {
+			return err
+		}
+		return audit.Record(principal.With(ctx, principal.System()), tx, audit.Entry{Action: "user.operator_admin_created", ResourceType: "user", ResourceID: id.String()})
+	})
+	if err != nil {
+		return nil, err
+	}
+	InvalidateAllSessionCache()
+	return s.GetUser(ctx, id)
+}
