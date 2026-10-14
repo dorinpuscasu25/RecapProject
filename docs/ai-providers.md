@@ -11,13 +11,14 @@ hardcoded in domain code.
 | Object | Endpoint | Notes |
 |---|---|---|
 | Provider | `/v1/admin/ai/providers` | kind `openai_compatible`, `anthropic`, `gemini` or `heuristic`; base URL; API key by env-var name (`api_key_env`) or write-only `api_key` (AES-GCM encrypted at rest, never returned); rate limit, concurrency, timeout, extra headers |
-| Model | `/v1/admin/ai/models` | kind chat/embedding/rerank/tts/stt; structured-output and JSON-mode support; languages; context and output limits; embedding dimensions (immutable); prices per million tokens or characters |
+| Model | `/v1/admin/ai/models` | kind chat/embedding/rerank/tts/stt (rerank models serve the `reranking` route; without one, search reranks by embedding cosine); structured-output and JSON-mode support; languages; context and output limits; embedding dimensions (immutable); prices per million tokens or characters |
 | Route | `/v1/admin/ai/routes` | per task and mode (`production`, `shadow`): primary model, ordered fallbacks, prompt version, temperature, max tokens, timeout, attempts, quality threshold, daily budget (USD), shadow sample rate, `on_unavailable` (`defer` or `fail`) |
 | Prompt | `/v1/admin/ai/prompts` | versioned system/user templates per task; routes pin a version |
 | Executions | `/v1/admin/ai/executions`, `/v1/admin/ai/usage` | tokens, characters, cost, latency, status, error category, fallback flag |
 | Evaluations | `/v1/admin/ai/evaluations` (`ai:evaluate`) | runs and per-case results from `newsctl eval` |
 
-The registry is cached and invalidated on admin writes. Every change is audited.
+The registry is cached; admin writes invalidate it in every process at once (PostgreSQL
+`LISTEN/NOTIFY`, ADR-023), so route switches apply without restarts. Every change is audited.
 
 ### Seeded state
 
@@ -26,6 +27,11 @@ The registry is cached and invalidated on admin writes. Every change is audited.
 - `heuristic` provider (enabled) with `local-rules` (chat; deterministic rules) and
   `local-hash-embed-384` (embeddings; feature hashing, 384 dimensions). Every task routes here by
   default, so the system works without any API key and tests are deterministic.
+- `local-ml` (enabled when `ML_SERVICE_URL` is set, as in compose): the Python ML service
+  ([ADR-021](decision-log.md)) with `bge-m3` (embedding, 1024 dimensions) and
+  `multilingual-reranker` (rerank). On a fresh install the `embeddings` and `reranking` routes
+  point at it; on an existing install the routes are left alone (switch them, then run the
+  embedding migration).
 - `anthropic` (model `claude-opus-5-5`), `openai`, `gemini` and `local-vllm`
   (OpenAI-compatible, e.g. vLLM or Ollama): **seeded disabled**. Enable them and switch routes from
   the admin API when keys are available.
@@ -37,7 +43,7 @@ one (for example an OpenAI-compatible `/audio/speech` model).
 
 | Kind | Chat / structured output | Embeddings | TTS | Notes |
 |---|---|---|---|---|
-| `openai_compatible` | `/chat/completions`; `response_format: json_schema` (strict) when the model supports it, `json_object` + schema in the system prompt for JSON-mode servers, prompt-only otherwise | `/embeddings` (index-ordered, dimension-checked) | `/audio/speech` | Works with OpenAI, vLLM, Ollama, LiteLLM and other compatible gateways |
+| `openai_compatible` | `/chat/completions`; `/rerank` (Cohere/Jina format) for rerank models; `response_format: json_schema` (strict) when the model supports it, `json_object` + schema in the system prompt for JSON-mode servers, prompt-only otherwise | `/embeddings` (index-ordered, dimension-checked) | `/audio/speech` | Works with OpenAI, vLLM, Ollama, LiteLLM and other compatible gateways |
 | `anthropic` | Official Go SDK, Messages API with `output_config.format` JSON schema; `refusal` and `max_tokens` stop reasons mapped to errors | — | — | SDK retries disabled; the gateway owns retries and fallbacks |
 | `gemini` | `generateContent` with `responseMimeType: application/json` and an OpenAPI-subset schema | `batchEmbedContents` with `outputDimensionality` | — | Safety blocks and truncation are explicit errors |
 | `heuristic` | Deterministic rules for every task | Feature hashing | — | Baseline and test double; it refuses tasks it cannot do honestly (e.g. synthesis without sources in the target language) |
@@ -86,6 +92,15 @@ curl -X PATCH $BASE/v1/admin/ai/routes/$ROUTE … -d '{"primary_model_id":"…",
 # 4. measure before and after
 go run ./cmd/newsctl eval -suite classification
 ```
+
+## ML service
+
+`services/ml` serves `/v1/embeddings` (OpenAI format), `/v1/rerank`, `/v1/models`, `/readyz` and
+`/metrics`; experimental `/v1/classify` and `/v1/entities`. Backends are chosen with `ML_*`
+settings (see [local operations](operations-local.md#configuration)). `python -m app.evaluate
+--url http://localhost:8000/v1` scores any OpenAI-compatible embedding endpoint on
+`fixtures/eval/retrieval.json` (recall@k, MRR, nDCG@10), and `newsctl eval -suite retrieval` does
+the same through the gateway's current `embeddings` route. Use both before switching models.
 
 ## Embedding migrations
 

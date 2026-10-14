@@ -215,14 +215,22 @@ func (a *App) JobHandlers() map[string]jobs.Handler {
 			}
 			uid, _ := uuid.Parse(p.UserID)
 			rid, _ := uuid.Parse(p.RequestID)
+			// On the last attempt the request is marked failed so the user sees it; an operator
+			// retry of the quarantined job can still complete it.
+			lastTry := func(err error) error {
+				if j.Attempts >= j.MaxAttempts {
+					_, _ = a.DB.Pool.Exec(ctx, `UPDATE user_data_requests SET status='failed', completed_at=now() WHERE id=$1 AND status<>'succeeded'`, rid)
+				}
+				return err
+			}
 			data, err := a.Identity.BuildExport(ctx, uid)
 			if err != nil {
-				return nil, err
+				return nil, lastTry(err)
 			}
 			b, _ := json.MarshalIndent(data, "", "  ")
 			key := fmt.Sprintf("exports/%s/%s.json", uid, rid)
 			if err := a.Store.Put(ctx, key, b, "application/json"); err != nil {
-				return nil, err
+				return nil, lastTry(err)
 			}
 			_, err = a.DB.Pool.Exec(ctx, `UPDATE user_data_requests SET status='succeeded', result_object_key=$2, completed_at=now() WHERE id=$1`, rid, key)
 			return map[string]string{"object_key": key}, err

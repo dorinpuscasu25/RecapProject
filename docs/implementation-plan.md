@@ -65,20 +65,33 @@ policy-gated breaking alerts; APNs and FCM adapters.
 `TestBreakingAlertsArePolicyGated`, push contract tests, schedule unit tests.
 *Not verified live:* TTS, APNs and FCM need real credentials.
 
-## Phase H — Hardening and evaluation: **partially done**
+## Phase H — Hardening and evaluation: **done** (with listed gaps)
 
-Done: replay and backfill, SSRF, RBAC and prompt-injection validation, observability (metrics,
-tracing, Langfuse metadata export, analytics), evaluation harness with gates, generated OpenAPI
-contract with drift and permission tests, documentation, reproducible demo and test report.
-Gaps:
-- No load or performance test suite (concurrency is exercised functionally: advisory-locked event
-  resolution, SKIP LOCKED queues, concurrent verification).
-- Evaluation datasets are small and synthetic; they need real, reviewed Moldovan cases.
-- No live runs against remote LLMs, TTS or push providers in this environment.
+Replay and backfill, SSRF, RBAC and prompt-injection validation, observability (metrics, tracing,
+Langfuse metadata export, analytics), evaluation harness with gates (classification, claims,
+answers, retrieval), generated OpenAPI contract with drift and permission tests, read-path load test
+(`cmd/loadtest`), static security analysis (gosec clean), compose end-to-end script, CI workflow.
+*Evidence:* [testing.md](testing.md#stack-load-and-security-checks).
+Gaps: ingestion throughput and soak tests; evaluation data is small and synthetic; govulncheck has
+not run outside CI.
+
+## Phase I — Complete backend architecture: **done** (live checks externally blocked)
+
+Python ML service (embeddings, reranking, experiments, evaluation) integrated through the AI
+gateway (ADR-021); full compose stack with Go API, worker, init, ML, PostgreSQL, Kafka, OpenSearch,
+Qdrant, Redis, SeaweedFS S3 (ADR-022) and Mailpit, with healthchecks and generated secrets;
+cross-process configuration invalidation (ADR-023); job leases with heartbeats, fencing and
+cancellation (ADR-020, Temporal not adopted); real-source verification tooling with a Moldovan RO/RU
+manifest; data export download; security fixes.
+*Evidence:* [audit.md](audit.md).
+*Externally blocked:* real model weights (HuggingFace) and the Moldovan sites are unreachable from
+the build environment; remote LLM, TTS and push need credentials.
 
 ## Requirement notes
 
-- **Temporal** was deferred in favour of the PostgreSQL job runner (ADR-006). Jobs are durable,
-  retried and observable; migrating long workflows to Temporal remains an option.
-- **Kafka** is supported and tested; the PostgreSQL bus is the default for single-node development.
+- **Temporal** was evaluated and not adopted (ADR-020); the PostgreSQL job runner has leases,
+  heartbeats, fencing and cancellation.
+- **Kafka** is the bus in the compose stack; the PostgreSQL bus remains for single-process
+  development and tests.
 - **pgvector** is not used anywhere.
+- **Mobile apps** are not part of this repository yet.

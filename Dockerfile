@@ -18,6 +18,7 @@ RUN adduser -D -u 10001 app
 WORKDIR /app
 COPY --from=build /out/ /usr/local/bin/
 COPY fixtures ./fixtures
+COPY config ./config
 COPY scripts/init.sh ./scripts/init.sh
 ENV FIXTURE_DIR=/app/fixtures STORAGE_DIR=/app/var/storage
 RUN mkdir -p /app/var/storage && chown -R app /app/var

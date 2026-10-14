@@ -242,3 +242,49 @@ touching domain code.
 
 **Known limitation.** Long jobs are not checkpointed: a reclaimed backfill restarts from the
 beginning (safe because writes are idempotent, but repeated work).
+
+## ADR-021 — Python ML service behind the AI gateway (accepted)
+
+**Context.** Multilingual embeddings (Romanian, Russian, cross-language queries) and cross-encoder
+reranking need model runtimes that are mature in Python and not in Go. Business logic must not be
+split between two languages.
+
+**Decision.** `services/ml` is a stateless FastAPI model server. It exposes OpenAI-compatible
+`/v1/embeddings`, Cohere/Jina-compatible `/v1/rerank`, readiness and Prometheus metrics. Go reaches
+it only through the AI gateway as an ordinary `openai_compatible` provider (`local-ml`), with
+routes `embeddings` and `reranking`; it is therefore swappable for any compatible endpoint (a hosted
+API, vLLM, TEI) by changing a route. The default runtime is ONNX via fastembed (no PyTorch, small
+image, CPU-friendly): BGE-M3 (1024 dimensions, CLS pooling, normalized) and
+`jina-reranker-v2-base-multilingual`. sentence-transformers is an optional backend; a deterministic
+`hash` backend exists for tests and offline use only and is labelled as such.
+
+Classification and entity extraction endpoints exist as **experiments** for evaluation; production
+classification, entity linking, event matching, verdicts and ranking stay in Go.
+
+**Consequences.** One more container and a model cache volume. Vector collections are named per
+model and dimension (`<doc>__bge_m3__1024`), so switching models goes through the embedding
+migration (build, backfill, cutover, rollback) and never mixes vector spaces. When the service is
+down, embeddings defer (no fabricated vectors) and search reports `degraded`.
+
+## ADR-022 — SeaweedFS for local S3 (accepted)
+
+**Context.** MinIO no longer publishes community container images; the compose stack still needs an
+S3-compatible store for exports, audio and raw snapshots.
+
+**Decision.** Use SeaweedFS (`server -s3`, Apache-2.0) locally with static identities in
+`deploy/seaweedfs/s3.json`. The application uses the generic S3 API (minio-go client), so any S3
+service works in other environments via `S3_*` settings. `S3_PUBLIC_ENDPOINT` signs presigned URLs
+for the address clients reach.
+
+## ADR-023 — Cross-process configuration invalidation with LISTEN/NOTIFY (accepted)
+
+**Context.** API, worker and CLI each cache the AI registry, editorial policies and session/permission
+data. With time-based expiry only, an admin change could take up to the TTL to reach the worker.
+
+**Decision.** Admin writes call `pg_notify('newsintel_config', scope)` in the writing transaction
+(policies) or right after it commits (AI registry, identity); scopes are `ai`, `policy`,
+`identity` and `*`. Each process holds a dedicated listening connection and
+invalidates the matching caches; on reconnect it invalidates everything, since notifications may
+have been missed. TTL expiry remains as a safety net. No extra infrastructure is needed, and
+notifications are delivered only after commit, so readers never reload uncommitted configuration.
+`TestConfigChangesPropagateAcrossProcesses` and `scripts/verify-dynamic-config.sh` verify it.

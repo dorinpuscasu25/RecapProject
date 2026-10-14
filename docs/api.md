@@ -51,7 +51,18 @@ curl -s -X POST $BASE/v1/auth/refresh -H 'Content-Type: application/json' -d '{"
 ```
 
 Wrong codes are counted (5 attempts), resends are rate limited, and responses never reveal whether
-an address is registered. Login is refused until the email is verified.
+an address is registered. Login is refused until the email is verified. In the compose stack the
+code arrives in Mailpit (http://localhost:8025, API `GET /api/v1/search?query=to:<email>`).
+
+Personal data export:
+
+```bash
+curl -s -X POST $BASE/v1/users/me/data-export -H "Authorization: Bearer $TOKEN"   # 202, job queued
+curl -s $BASE/v1/users/me/data-requests -H "Authorization: Bearer $TOKEN"
+# {"items":[{"id":"…","kind":"export","status":"succeeded","download_url":"http://localhost:8333/…&X-Amz-Signature=…",
+#            "url_expires_at":"…"}]}   presigned for 15 minutes; with filesystem storage the URL is
+#            /v1/users/me/data-requests/{id}/download (authenticated, owner only)
+```
 
 ## Reading news
 

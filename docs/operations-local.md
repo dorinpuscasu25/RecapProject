@@ -4,20 +4,28 @@ Development and evaluation only; production deployment is out of scope.
 
 ## Stack
 
-`docker compose up -d` starts:
+`./scripts/setup.sh && docker compose up -d` starts:
 
 | Service | Port | Used for |
 |---|---|---|
-| PostgreSQL 16 | 5432 | Source of truth (user/password `newsintel`) |
-| Kafka 3.8 (KRaft) | 9092 | `BUS_DRIVER=kafka` |
-| OpenSearch 2.17 | 9200 | Lexical search (security disabled locally) |
-| Qdrant 1.12 | 6333 | Vectors |
-| Redis 7 | 6379 | Rate limits, feed cache |
-| MinIO | 9000 (console 9001) | `STORAGE_DRIVER=s3` |
-| Mailpit | 1025 (UI 8025) | `MAIL_DRIVER=smtp` |
+| `postgres` (16) | 5432 | Source of truth (user/password `newsintel`) |
+| `kafka` (3.8, KRaft) | 9092 (host), 19092 (containers) | Message bus (`BUS_DRIVER=kafka`) |
+| `opensearch` (2.17) | 9200 | Lexical search (security disabled locally) |
+| `qdrant` (1.12) | 6333 | Vectors |
+| `redis` (7) | 6379 | Rate limits, feed cache |
+| `s3` (SeaweedFS) | 8333 | S3-compatible object storage: exports, audio, raw snapshots. Credentials in `deploy/seaweedfs/s3.json` (ADR-022) |
+| `mailpit` | 1025 SMTP, 8025 UI | All outgoing email, including verification codes |
+| `ml` | 8000 | Python ML service: embeddings and reranking ([services/ml](../services/ml)) |
+| `init` | — | One-shot: migrate, seed, create the admin, ingest fixtures (`SEED_FIXTURES`) |
+| `api` | 8080, metrics 9090 | HTTP API |
+| `worker` | metrics 9091 | Consumers, jobs, schedulers, mail |
 
-Everything except PostgreSQL is optional: without them the system runs with the PostgreSQL bus,
-PostgreSQL full-text search and in-memory vectors (reported as `degraded`), in-process rate limits,
+Startup order is enforced with healthchecks: infrastructure → `init` (completed) → `api`;
+`worker` also waits for `ml` to be ready. Rebuild after code changes with
+`docker compose up -d --build api worker`.
+
+Without the full stack the Go binaries also run with only PostgreSQL: PostgreSQL bus, PostgreSQL
+full-text search and in-memory vectors (reported as `degraded`), in-process rate limits,
 filesystem storage and the dev mail sink.
 
 OpenSearch on a small disk may block index creation (disk watermark). The compose file disables
@@ -26,26 +34,41 @@ the threshold; on an existing node run:
 
 ## Configuration
 
-Copy `.env.example` to `.env`, set `SECRETS_ENCRYPTION_KEY`, `AUTH_CODE_HMAC_SECRET` and
-`AUTH_SIGNING_KEYS` (`openssl rand -base64 32`; signing keys are `kid:base64seed`), then
-`set -a; source .env; set +a`. API and worker must share the same secrets. Without them, development
-mode generates per-process random values, so tokens, stored provider keys and device tokens do not
-survive restarts or cross processes. `APP_ENV=production` refuses to start without them and rejects
-unsafe settings (private-network crawling, fixture time anchor, dev mail sink).
+`scripts/setup.sh` creates `.env` from `.env.example` with generated `SECRETS_ENCRYPTION_KEY`,
+`AUTH_CODE_HMAC_SECRET`, `AUTH_SIGNING_KEYS` and a first admin (`ADMIN_EMAIL`, `ADMIN_PASSWORD`,
+`ADMIN_PHONE`). It never overwrites an existing `.env`. Compose refuses to start when a required
+secret is missing and says to run the script. API, worker and CLI must share the same secrets.
+`APP_ENV=production` refuses to start without them and rejects unsafe settings (private-network
+crawling, fixture time anchor, dev mail sink, weak Argon2 memory). Numeric settings are
+range-checked.
+
+ML service settings (`ML_*` in `.env`): `ML_EMBEDDING_BACKEND` (`fastembed`, `sentence_transformers`
+or `hash`), `ML_EMBEDDING_MODEL` (default `BAAI/bge-m3`), `ML_EMBEDDING_DIMS`, `ML_RERANK_BACKEND`
+(`fastembed`, `sentence_transformers`, `embedding` or `none`), `ML_RERANK_MODEL`, `ML_API_KEY`
+(optional bearer token) and `HF_TOKEN` for gated models. Changing the embedding model or dimensions
+is a vector migration (see below), not just a setting.
+
+`S3_PUBLIC_ENDPOINT` is the storage address clients use; presigned URLs are signed for it
+(compose: `localhost:8333`, while services use `s3:8333`).
 
 ## Day-to-day
 
 ```bash
-go run ./cmd/migrate && go run ./cmd/newsctl seed
-go run ./cmd/newsctl ingest-fixtures        # synthetic sources; drains the pipeline (postgres bus)
-go run ./cmd/api                            # :8080, metrics :9090
-go run ./cmd/worker                         # metrics :9091
-go run ./cmd/newsctl bootstrap-admin -email you@example.com
-scripts/demo.sh                             # consumer walkthrough
+docker compose logs -f worker                       # pipeline progress
+docker compose exec worker newsctl reindex          # any newsctl command runs inside the image
+docker compose exec worker newsctl eval -suite retrieval
+scripts/e2e.sh                                      # end-to-end check of the running stack
+scripts/verify-dynamic-config.sh                    # live config changes without restarts
+go run ./cmd/loadtest -c 32 -d 60s                  # read-path load test
 ```
 
 With `BUS_DRIVER=kafka` the worker relays the outbox and runs consumer groups; topics and `.dlq`
 topics are created at start. `newsctl drain` only applies to the PostgreSQL bus.
+
+Configuration changes made through the admin API (sources, categories, AI providers, models,
+routes, prompts, policies, roles) reach every process immediately through PostgreSQL
+`LISTEN/NOTIFY` on channel `newsintel_config`; time-based cache expiry remains as a fallback
+(ADR-023).
 
 ## Operator tasks
 
@@ -57,7 +80,10 @@ topics are created at start. `newsctl drain` only applies to the PostgreSQL bus.
 | Retry or cancel jobs | `/v1/admin/jobs`, `/{id}/retry`, `/{id}/cancel` |
 | Reclassify after taxonomy changes | `POST /v1/admin/categories/reclassify` with `dry_run` first |
 | Enable a remote model | Set its API key env var, enable provider and model, switch the route, run `newsctl eval` |
-| Enable live crawling | `CRAWL_LIVE_ENABLED=true` and feature flag `live_crawling` |
+| Enable live crawling | `CRAWL_LIVE_ENABLED=true` (API and worker) and feature flag `live_crawling` for scheduled polling |
+| Verify real sources | `newsctl verify-sources -legal-basis "…" [-manifest config/sources/moldova.json]`; see [audit](audit.md#real-sources) |
+| Create or promote an admin | `newsctl create-admin -email … -password … -phone …` (or `ADMIN_*` env) |
+| Switch to real ML models | `ML_EMBEDDING_BACKEND=fastembed` (default) with HuggingFace reachable or the model cache mounted at `/models`; then compare `newsctl eval -suite retrieval` |
 | Enable breaking alerts | Feature flag `breaking_notifications` (rollout percentage supported); thresholds in policy `notifications` |
 | Push notifications | `PUSH_DRIVER=apns,fcm` with APNs key (`.p8` PEM) and FCM service-account JSON; otherwise deliveries are `provider_unavailable` |
 | Audit | `GET /v1/admin/audit-logs?resource_type=…` |
