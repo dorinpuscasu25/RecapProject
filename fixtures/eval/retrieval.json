@@ -1,0 +1,36 @@
+{
+  "version": "1",
+  "description": "SYNTHETIC retrieval cases for embedding models: Romanian and Russian documents, same-language and cross-language queries. Used by `python -m app.evaluate` and the Go `retrieval` eval suite.",
+  "gates": {"recall@5": 0.5, "mrr": 0.4},
+  "corpus": [
+    {"id": "d-tarif-ro", "text": "ANRE a aprobat majorarea tarifului la energia electrică pentru consumatorii casnici cu 15%, de la 3,05 la 3,51 lei pentru un kilowatt-oră."},
+    {"id": "d-tarif-ru", "text": "НАРЭ утвердило повышение тарифа на электроэнергию для бытовых потребителей на 15%: с 3,05 до 3,51 лея за киловатт-час."},
+    {"id": "d-gaz-ro", "text": "Prețul gazelor naturale pentru populație va scădea cu 8% începând de luna viitoare, a anunțat regulatorul."},
+    {"id": "d-pensii-ro", "text": "Guvernul a decis indexarea pensiilor cu 6% începând cu 1 aprilie, potrivit Ministerului Muncii."},
+    {"id": "d-pensii-ru", "text": "Правительство приняло решение проиндексировать пенсии на 6% с 1 апреля, сообщило министерство труда."},
+    {"id": "d-struguri-ro", "text": "Fermierii din sudul țării au început recoltarea strugurilor; producția este estimată în creștere față de anul trecut."},
+    {"id": "d-vinograd-ru", "text": "Фермеры на юге страны начали сбор винограда, урожай ожидается выше прошлогоднего."},
+    {"id": "d-troleibuz-ro", "text": "Primăria Chișinău a lansat zece troleibuze noi pe rutele din sectorul Botanica."},
+    {"id": "d-fotbal-ro", "text": "Echipa națională de fotbal a câștigat meciul amical cu scorul de 2-1 pe stadionul din capitală."},
+    {"id": "d-ue-ro", "text": "Republica Moldova a deschis un nou capitol în negocierile de aderare la Uniunea Europeană la Bruxelles."},
+    {"id": "d-ue-ru", "text": "Молдова открыла новую главу в переговорах о вступлении в Европейский союз в Брюсселе."},
+    {"id": "d-spital-ro", "text": "Spitalul raional a primit aparatură nouă pentru diagnosticarea pacienților, finanțată de CNAM."},
+    {"id": "d-it-ro", "text": "Un startup IT din Chișinău a lansat o aplicație de inteligență artificială pentru traducerea documentelor."},
+    {"id": "d-bac-ro", "text": "Rezultatele examenului de bacalaureat au fost publicate; elevii pot depune contestații timp de două zile."},
+    {"id": "d-sud-ru", "text": "Суд вынес обвинительный приговор бывшему чиновнику по делу о коррупции."}
+  ],
+  "queries": [
+    {"query": "cât costă acum kilowatt-ora de curent electric", "relevant": ["d-tarif-ro", "d-tarif-ru"]},
+    {"query": "сколько стоит электроэнергия после повышения тарифа", "relevant": ["d-tarif-ru", "d-tarif-ro"]},
+    {"query": "indexarea pensiilor din aprilie", "relevant": ["d-pensii-ro", "d-pensii-ru"]},
+    {"query": "индексация пенсий", "relevant": ["d-pensii-ru", "d-pensii-ro"]},
+    {"query": "recolta de struguri", "relevant": ["d-struguri-ro", "d-vinograd-ru"]},
+    {"query": "урожай винограда на юге", "relevant": ["d-vinograd-ru", "d-struguri-ro"]},
+    {"query": "aderarea Moldovei la UE", "relevant": ["d-ue-ro", "d-ue-ru"]},
+    {"query": "transport public nou în Chișinău", "relevant": ["d-troleibuz-ro"]},
+    {"query": "prețul la gaz pentru consumatori", "relevant": ["d-gaz-ro"]},
+    {"query": "приговор по коррупции", "relevant": ["d-sud-ru"]},
+    {"query": "aplicație de traducere cu AI", "relevant": ["d-it-ro"]},
+    {"query": "electricity price increase in Moldova", "relevant": ["d-tarif-ro", "d-tarif-ru"]}
+  ]
+}

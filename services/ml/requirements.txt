@@ -1,0 +1,8 @@
+# Runtime (CPU, no PyTorch). Optional sentence-transformers backend: requirements-torch.txt
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+pydantic==2.11.4
+pydantic-settings==2.9.1
+fastembed==0.7.3
+numpy>=1.26,<3
+prometheus-client==0.21.1

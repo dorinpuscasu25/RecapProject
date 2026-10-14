@@ -13,7 +13,7 @@ import (
 func TestEvalSuitesMeetGates(t *testing.T) {
 	e := testutil.NewEnv(t)
 	r := &eval.Runner{DB: e.App.DB, GW: e.App.AIGateway(), Tax: e.App.Taxonomy, Dir: filepath.Join(testutil.RepoRoot(), "fixtures", "eval")}
-	for _, s := range []string{"classification", "claims", "answers"} {
+	for _, s := range []string{"classification", "claims", "answers", "retrieval"} {
 		rep, err := r.Run(e.Ctx, s, nil)
 		if err != nil {
 			t.Fatalf("%s: %v", s, err)

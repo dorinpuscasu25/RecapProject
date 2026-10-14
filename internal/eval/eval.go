@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -30,6 +31,7 @@ var Suites = map[string]struct {
 	"classification": {ai.TaskClassification, "classification.json"},
 	"claims":         {ai.TaskClaimExtraction, "claims.json"},
 	"answers":        {ai.TaskChatAnswering, "answers.json"},
+	"retrieval":      {ai.TaskEmbeddings, "retrieval.json"},
 }
 
 // Dataset is the on-disk format: a gate (minimum metric values) plus cases.
@@ -76,7 +78,7 @@ type caseResult struct {
 func (r *Runner) Run(ctx context.Context, suite string, actor *uuid.UUID) (*Report, error) {
 	def, ok := Suites[suite]
 	if !ok {
-		return nil, fmt.Errorf("unknown suite %q (known: classification, claims, answers)", suite)
+		return nil, fmt.Errorf("unknown suite %q (known: classification, claims, answers, retrieval)", suite)
 	}
 	raw, err := os.ReadFile(filepath.Join(r.Dir, def.File))
 	if err != nil {
@@ -107,6 +109,8 @@ func (r *Runner) Run(ctx context.Context, suite string, actor *uuid.UUID) (*Repo
 		results, metrics, err = r.claims(ctx, ds.Cases)
 	case "answers":
 		results, metrics, err = r.answers(ctx, ds.Cases)
+	case "retrieval":
+		results, metrics, err = r.retrieval(ctx, raw)
 	}
 	if err != nil {
 		_, _ = r.DB.Pool.Exec(ctx, `UPDATE eval_runs SET status='failed', error=$2, finished_at=now() WHERE id=$1`, runID, err.Error())
@@ -406,6 +410,109 @@ func f1(p, r float64) float64 {
 		return 0
 	}
 	return 2 * p * r / (p + r)
+}
+
+// ---------- retrieval (embedding models) ----------
+
+// retrieval ranks a small multilingual corpus for each query with the routed embedding model and
+// reports recall@k, MRR and nDCG@10. The dataset format is shared with services/ml (app.evaluate).
+func (r *Runner) retrieval(ctx context.Context, raw []byte) ([]caseResult, map[string]float64, error) {
+	var ds struct {
+		Corpus []struct {
+			ID   string `json:"id"`
+			Text string `json:"text"`
+		} `json:"corpus"`
+		Queries []struct {
+			Query    string   `json:"query"`
+			Relevant []string `json:"relevant"`
+		} `json:"queries"`
+	}
+	if err := json.Unmarshal(raw, &ds); err != nil {
+		return nil, nil, err
+	}
+	m, err := r.GW.EmbeddingModel(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	texts := make([]string, len(ds.Corpus))
+	for i, d := range ds.Corpus {
+		texts[i] = d.Text
+	}
+	docs, err := r.GW.EmbedTexts(ctx, m, texts, opts("retrieval", "corpus"))
+	if err != nil {
+		return nil, nil, err
+	}
+	var out []caseResult
+	var r1, r5, mrr, ndcg float64
+	for qi, q := range ds.Queries {
+		qv, err := r.GW.EmbedTexts(ctx, m, []string{q.Query}, opts("retrieval", fmt.Sprint(qi)))
+		if err != nil {
+			return nil, nil, err
+		}
+		idx := make([]int, len(docs))
+		score := make([]float64, len(docs))
+		for i := range docs {
+			idx[i], score[i] = i, dot(qv[0], docs[i])
+		}
+		sort.SliceStable(idx, func(a, b int) bool { return score[idx[a]] > score[idx[b]] })
+		rel := map[string]bool{}
+		for _, id := range q.Relevant {
+			rel[id] = true
+		}
+		var ranked []string
+		hit1, hit5, rr, dcg, idcg := 0.0, 0.0, 0.0, 0.0, 0.0
+		for rank, i := range idx {
+			id := ds.Corpus[i].ID
+			ranked = append(ranked, id)
+			if !rel[id] {
+				continue
+			}
+			if rank < 1 {
+				hit1++
+			}
+			if rank < 5 {
+				hit5++
+			}
+			if rr == 0 {
+				rr = 1 / float64(rank+1)
+			}
+			if rank < 10 {
+				dcg += 1 / math.Log2(float64(rank+2))
+			}
+		}
+		for i := 0; i < len(rel) && i < 10; i++ {
+			idcg += 1 / math.Log2(float64(i+2))
+		}
+		n := float64(len(rel))
+		r1 += hit1 / n
+		r5 += hit5 / n
+		mrr += rr
+		if idcg > 0 {
+			ndcg += dcg / idcg
+		}
+		if len(ranked) > 5 {
+			ranked = ranked[:5]
+		}
+		out = append(out, caseResult{id: fmt.Sprintf("q%02d", qi+1), expected: q.Relevant, actual: ranked, passed: rr == 1,
+			scores: map[string]float64{"rr": rr}})
+	}
+	n := float64(len(ds.Queries))
+	return out, map[string]float64{"recall@1": r1 / n, "recall@5": r5 / n, "mrr": mrr / n, "ndcg@10": ndcg / n}, nil
+}
+
+func dot(a, b []float32) float64 {
+	var s, na, nb float64
+	for i := range a {
+		if i < len(b) {
+			s += float64(a[i]) * float64(b[i])
+			na += float64(a[i]) * float64(a[i])
+			nb += float64(b[i]) * float64(b[i])
+		}
+	}
+	if na == 0 || nb == 0 {
+		return 0
+	}
+	return s / math.Sqrt(na*nb)
 }
 
 // ---------- listing ----------

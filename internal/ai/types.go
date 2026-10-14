@@ -138,6 +138,11 @@ type EmbeddingProvider interface {
 	Embed(ctx context.Context, model *Model, texts []string) ([][]float32, Usage, error)
 }
 
+// RerankProvider scores documents against a query (cross-encoder). Higher is more relevant.
+type RerankProvider interface {
+	Rerank(ctx context.Context, model *Model, query string, docs []string) ([]float64, Usage, error)
+}
+
 // SpeechProvider synthesizes audio.
 type SpeechProvider interface {
 	Speak(ctx context.Context, model *Model, req SpeechRequest) (*SpeechResult, error)

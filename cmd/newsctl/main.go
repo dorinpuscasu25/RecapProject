@@ -40,7 +40,7 @@ const usage = `newsctl — operator CLI
   newsctl drain                                          process all pending messages, jobs and mail once (postgres bus)
   newsctl reindex [-types event,article,claim]           rebuild OpenSearch/Qdrant documents from PostgreSQL
   newsctl replay-dead-letter (-id UUID | -all)           requeue dead-lettered messages
-  newsctl eval [-suite all|classification|claims|answers] [-dir fixtures/eval]
+  newsctl eval [-suite all|classification|claims|answers|retrieval] [-dir fixtures/eval]
                                                          run evaluation suites; exit status 3 when a quality gate fails
 
 Configuration comes from the environment (see .env.example).
@@ -100,7 +100,7 @@ func run(ctx context.Context, cmd string, args []string, log *slog.Logger) (int,
 			return 1, err
 		}
 		defer a.Close()
-		if err := seed.Run(ctx, a.DB, seed.Options{Categories: *cats, Entities: *ents}); err != nil {
+		if err := seed.Run(ctx, a.DB, seed.Options{Categories: *cats, Entities: *ents, MLServiceURL: os.Getenv("ML_SERVICE_URL")}); err != nil {
 			return 1, err
 		}
 		fmt.Println("seed complete")
@@ -250,7 +250,7 @@ func run(ctx context.Context, cmd string, args []string, log *slog.Logger) (int,
 		r := &eval.Runner{DB: a.DB, GW: a.AIGateway(), Tax: a.Taxonomy, Dir: *dir}
 		names := []string{*suite}
 		if *suite == "all" {
-			names = []string{"classification", "claims", "answers"}
+			names = []string{"classification", "claims", "answers", "retrieval"}
 		}
 		failed := false
 		var reports []*eval.Report

@@ -136,6 +136,13 @@ func WithoutCategorySeed() EnvOption {
 	return func(c *config.Config, _ *app.Options) { skipCategorySeed[c] = true }
 }
 
+var mlServiceURL = map[*config.Config]string{}
+
+// WithMLService seeds the AI registry with the Python ML service at url (provider local-ml).
+func WithMLService(url string) EnvOption {
+	return func(c *config.Config, _ *app.Options) { mlServiceURL[c] = url }
+}
+
 // WithRateLimiter overrides the limiter (default: no-op to avoid flakiness; rate-limit tests use memory).
 func WithRateLimiter(l ratelimit.Limiter) EnvOption {
 	return func(_ *config.Config, o *app.Options) { o.Limiter = l }
@@ -180,7 +187,7 @@ func NewEnv(t testing.TB, opts ...EnvOption) *Env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := seed.Run(ctx, a.DB, seed.Options{Categories: !skipCategorySeed[cfg], Entities: true}); err != nil {
+	if err := seed.Run(ctx, a.DB, seed.Options{Categories: !skipCategorySeed[cfg], Entities: true, MLServiceURL: mlServiceURL[cfg]}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	srv := httptest.NewServer(a.Handler())

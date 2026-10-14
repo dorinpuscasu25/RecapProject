@@ -1,0 +1,4 @@
+# Optional backend: EMBEDDING_BACKEND=sentence_transformers / RERANK_BACKEND=sentence_transformers.
+# Install torch from the CPU index first: pip install torch --index-url https://download.pytorch.org/whl/cpu
+sentence-transformers==3.4.1
+transformers>=4.44,<5

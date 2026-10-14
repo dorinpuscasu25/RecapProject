@@ -672,7 +672,35 @@ func (g *Gateway) EmbedTexts(ctx context.Context, m *Model, texts []string, o Ca
 
 // Rerank scores documents against a query. Uses the reranking route when configured with a
 // chat model (pointwise relevance via embeddings is the deterministic fallback).
+// Rerank scores docs against query. It uses the `reranking` route when it has a usable model of
+// kind "rerank" (e.g. the ML service's cross-encoder); otherwise it falls back to cosine similarity
+// on the active embedding model. The second result reports which path was used.
 func (g *Gateway) Rerank(ctx context.Context, query string, docs []string) ([]float64, error) {
+	if r, err := g.RouteFor(ctx, TaskReranking); err == nil {
+		for _, m := range r.Chain {
+			if g.usable(m, "rerank") != nil {
+				continue
+			}
+			p, err := g.reranker(m)
+			if err != nil {
+				continue
+			}
+			release, err := g.acquire(ctx, m)
+			if err != nil {
+				continue
+			}
+			start := time.Now()
+			scores, u, err := p.Rerank(ctx, m, query, docs)
+			release()
+			lat := int(time.Since(start).Milliseconds())
+			if err != nil {
+				g.record(ctx, r, m, "production", TaskReranking, "failed", 1, Usage{}, lat, string(categoryOf(err)), err.Error(), CallOpts{SubjectType: "rerank"}, nil, false, "")
+				continue
+			}
+			g.record(ctx, r, m, "production", TaskReranking, "succeeded", 1, u, lat, "", "", CallOpts{SubjectType: "rerank"}, nil, false, "")
+			return scores, nil
+		}
+	}
 	m, err := g.EmbeddingModel(ctx)
 	if err != nil {
 		return nil, err
@@ -686,6 +714,16 @@ func (g *Gateway) Rerank(ctx context.Context, query string, docs []string) ([]fl
 		out[i] = cosine(vecs[0], vecs[i+1])
 	}
 	return out, nil
+}
+
+func (g *Gateway) reranker(m *Model) (RerankProvider, error) {
+	if o, ok := g.overrides[m.Provider.Slug].(RerankProvider); ok {
+		return o, nil
+	}
+	if m.Provider.Kind == "openai_compatible" {
+		return &OpenAICompatible{P: m.Provider, Client: defaultHTTPClient(m.Provider.TimeoutMS)}, nil
+	}
+	return nil, &ProviderError{Category: ErrUnsupported, Msg: "provider kind has no rerank endpoint: " + m.Provider.Kind}
 }
 
 func cosine(a, b []float32) float64 {

@@ -237,3 +237,26 @@ func TestGeminiContract(t *testing.T) {
 		t.Fatalf("embed: %v %v %+v", vecs, err, c.body)
 	}
 }
+
+func TestOpenAICompatibleRerankContract(t *testing.T) {
+	var c capture
+	srv := server(t, &c, func(w http.ResponseWriter, body map[string]any) {
+		_, _ = io.WriteString(w, `{"model":"r","results":[{"index":1,"relevance_score":0.9},{"index":0,"relevance_score":0.1}],"usage":{"total_tokens":12}}`)
+	})
+	o := &OpenAICompatible{P: &Provider{BaseURL: srv.URL + "/v1"}, Client: srv.Client()}
+	scores, u, err := o.Rerank(context.Background(), &Model{Name: "multilingual-reranker"}, "q", []string{"a", "b"})
+	if err != nil || scores[0] != 0.1 || scores[1] != 0.9 || u.InputTokens != 12 {
+		t.Fatalf("rerank: %v %v %v", scores, u, err)
+	}
+	if c.path != "/v1/rerank" || c.body["query"] != "q" || len(c.body["documents"].([]any)) != 2 || c.body["model"] != "multilingual-reranker" {
+		t.Fatalf("request: %s %+v", c.path, c.body)
+	}
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"results":[{"index":5,"relevance_score":1}]}`)
+	}))
+	defer bad.Close()
+	o2 := &OpenAICompatible{P: &Provider{BaseURL: bad.URL}, Client: bad.Client()}
+	if _, _, err := o2.Rerank(context.Background(), &Model{Name: "x"}, "q", []string{"a"}); category(err) != ErrTransient {
+		t.Fatalf("out-of-range index must be rejected: %v", err)
+	}
+}

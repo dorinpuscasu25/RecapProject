@@ -1,0 +1,12 @@
+[project]
+name = "newsintel-ml"
+version = "0.1.0"
+description = "ML/NLP service for the Moldova News Intelligence backend: multilingual embeddings, reranking, semantic classification experiments and retrieval evaluation."
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"

@@ -175,3 +175,34 @@ func defaultHTTPClient(timeoutMS int) *http.Client {
 	}
 	return &http.Client{Timeout: t}
 }
+
+// Rerank calls the Cohere/Jina-style `/rerank` endpoint served by this project's ML service,
+// Hugging Face TEI, vLLM and Jina: {model, query, documents} → {results: [{index, relevance_score}]}.
+func (o *OpenAICompatible) Rerank(ctx context.Context, m *Model, query string, docs []string) ([]float64, Usage, error) {
+	raw, _, err := o.do(ctx, "/rerank", map[string]any{"model": m.Name, "query": query, "documents": docs})
+	if err != nil {
+		return nil, Usage{}, err
+	}
+	var rr struct {
+		Results []struct {
+			Index          int     `json:"index"`
+			RelevanceScore float64 `json:"relevance_score"`
+		} `json:"results"`
+		Usage struct {
+			TotalTokens int `json:"total_tokens"`
+		} `json:"usage"`
+	}
+	if err := json.Unmarshal(raw, &rr); err != nil || len(rr.Results) != len(docs) {
+		return nil, Usage{}, &ProviderError{Category: ErrTransient, Msg: "malformed rerank response"}
+	}
+	out := make([]float64, len(docs))
+	seen := make([]bool, len(docs))
+	for _, r := range rr.Results {
+		if r.Index < 0 || r.Index >= len(docs) || seen[r.Index] {
+			return nil, Usage{}, &ProviderError{Category: ErrTransient, Msg: "rerank index out of range"}
+		}
+		seen[r.Index] = true
+		out[r.Index] = r.RelevanceScore
+	}
+	return out, Usage{InputTokens: rr.Usage.TotalTokens}, nil
+}

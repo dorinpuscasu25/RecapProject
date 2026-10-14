@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -19,6 +20,11 @@ import (
 type Options struct {
 	Categories bool
 	Entities   bool
+	// MLServiceURL registers the project's Python ML service (services/ml) as provider `local-ml`
+	// with BGE-M3 embeddings and a multilingual reranker. On a fresh install (no vector
+	// collections yet) the embeddings and reranking routes point at it; afterwards switching the
+	// embedding model must go through an embedding migration.
+	MLServiceURL string
 }
 
 func Run(ctx context.Context, d *db.DB, o Options) error {
@@ -26,7 +32,7 @@ func Run(ctx context.Context, d *db.DB, o Options) error {
 		if err := policies(ctx, tx); err != nil {
 			return fmt.Errorf("policies: %w", err)
 		}
-		if err := aiPlatform(ctx, tx); err != nil {
+		if err := aiPlatform(ctx, tx, o.MLServiceURL); err != nil {
 			return fmt.Errorf("ai: %w", err)
 		}
 		if o.Entities {
@@ -119,7 +125,7 @@ func upsertModel(ctx context.Context, tx pgx.Tx, provider uuid.UUID, m modelSeed
 	return id, err
 }
 
-func aiPlatform(ctx context.Context, tx pgx.Tx) error {
+func aiPlatform(ctx context.Context, tx pgx.Tx, mlURL string) error {
 	heur, err := upsertProvider(ctx, tx, "heuristic", "heuristic", "Deterministic rule-based baseline (local)", "", "", true)
 	if err != nil {
 		return err
@@ -168,6 +174,47 @@ func aiPlatform(ctx context.Context, tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `INSERT INTO ai_task_routes (id, task, mode, primary_model_id, prompt_version_id, max_output_tokens, timeout_ms, max_attempts)
 			SELECT $1,$2,'production',$3,$4,4000,60000,2 WHERE NOT EXISTS (SELECT 1 FROM ai_task_routes WHERE task=$2 AND mode='production')`,
 			ids.New(), string(p.Task), rules, pvID); err != nil {
+			return err
+		}
+	}
+	if mlURL != "" {
+		base := strings.TrimSuffix(mlURL, "/")
+		if !strings.HasSuffix(base, "/v1") {
+			base += "/v1"
+		}
+		ml, err := upsertProvider(ctx, tx, "local-ml", "openai_compatible", "Project ML service (BGE-M3 embeddings, multilingual reranker)", base, "ML_API_KEY", true)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE ai_providers SET base_url=$2, enabled=true WHERE id=$1`, ml, base); err != nil {
+			return err
+		}
+		mlDims := 1024
+		bge, err := upsertModel(ctx, tx, ml, modelSeed{slug: "bge-m3", name: "bge-m3", version: "BAAI/bge-m3", kind: "embedding", dims: &mlDims, enabled: true, ctxWindow: 8192})
+		if err != nil {
+			return err
+		}
+		rr, err := upsertModel(ctx, tx, ml, modelSeed{slug: "multilingual-reranker", name: "multilingual-reranker", version: "jinaai/jina-reranker-v2-base-multilingual",
+			kind: "rerank", enabled: true, ctxWindow: 1024})
+		if err != nil {
+			return err
+		}
+		// Fresh install only: nothing has been embedded yet, so no migration is needed.
+		if _, err := tx.Exec(ctx, `INSERT INTO ai_task_routes (id, task, mode, primary_model_id, on_unavailable)
+			SELECT $1,'embeddings','production',$2,'defer' WHERE NOT EXISTS (SELECT 1 FROM ai_task_routes WHERE task='embeddings' AND mode='production')`, ids.New(), bge); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE ai_task_routes SET primary_model_id=$1, version=version+1, updated_at=now()
+			WHERE task='embeddings' AND mode='production' AND primary_model_id=$2 AND NOT EXISTS (SELECT 1 FROM vector_collections)`, bge, embed); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO ai_task_routes (id, task, mode, primary_model_id, on_unavailable, timeout_ms)
+			SELECT $1,'reranking','production',$2,'fail',30000 WHERE NOT EXISTS (SELECT 1 FROM ai_task_routes WHERE task='reranking' AND mode='production')`,
+			ids.New(), rr); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE ai_task_routes SET primary_model_id=$1, version=version+1, updated_at=now()
+			WHERE task='reranking' AND mode='production' AND primary_model_id=$2`, rr, rules); err != nil {
 			return err
 		}
 	}
