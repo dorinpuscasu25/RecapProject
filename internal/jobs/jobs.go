@@ -146,12 +146,15 @@ func Retry(ctx context.Context, q db.Querier, id uuid.UUID) error {
 }
 
 func Cancel(ctx context.Context, q db.Querier, id uuid.UUID) error {
-	tag, err := q.Exec(ctx, `UPDATE jobs SET status='cancelled', updated_at=now(), finished_at=now() WHERE id=$1 AND status='queued'`, id)
+	// A running job is cancelled cooperatively: its heartbeat notices the status change and
+	// cancels the handler's context; the handler's result is then discarded.
+	tag, err := q.Exec(ctx, `UPDATE jobs SET status='cancelled', locked_until=NULL, updated_at=now(), finished_at=now()
+		WHERE id=$1 AND status IN ('queued','processing')`, id)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return apperr.Conflict("job_not_cancellable", "Only queued jobs can be cancelled.")
+		return apperr.Conflict("job_not_cancellable", "Only queued or running jobs can be cancelled.")
 	}
 	return nil
 }
@@ -170,7 +173,9 @@ type Runner struct {
 	Concurrency  int
 	PollInterval time.Duration
 	Lease        time.Duration
-	workerID     string
+	// WorkerID identifies this runner in locked_by (defaults to host-pid).
+	WorkerID string
+	workerID string
 }
 
 func (r *Runner) init() {
@@ -185,6 +190,9 @@ func (r *Runner) init() {
 	}
 	if r.Log == nil {
 		r.Log = slog.Default()
+	}
+	if r.workerID == "" {
+		r.workerID = r.WorkerID
 	}
 	if r.workerID == "" {
 		h, _ := os.Hostname()
@@ -280,6 +288,34 @@ func splitCols(s string) []string {
 func (r *Runner) execute(ctx context.Context, j *Job) {
 	h := r.Handlers[j.Kind]
 	log := r.Log.With("job_id", j.ID, "kind", j.Kind, "attempt", j.Attempts)
+	// The handler runs under a lease that a heartbeat extends. If the lease is lost (another
+	// worker reclaimed an expired lease) or the job is cancelled, the handler's context is
+	// cancelled and its outcome is not written: completion is fenced on (worker, attempt).
+	hctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	lost := make(chan struct{})
+	hbDone := make(chan struct{})
+	go func() {
+		defer close(hbDone)
+		t := time.NewTicker(r.Lease / 3)
+		defer t.Stop()
+		for {
+			select {
+			case <-hctx.Done():
+				return
+			case <-t.C:
+				tag, err := r.DB.Pool.Exec(ctx, `UPDATE jobs SET locked_until=now()+$4::interval, updated_at=now()
+					WHERE id=$1 AND locked_by=$2 AND attempts=$3 AND status='processing'`, j.ID, r.workerID, j.Attempts,
+					fmt.Sprintf("%d milliseconds", r.Lease.Milliseconds()))
+				if err == nil && tag.RowsAffected() == 0 {
+					log.Warn("job lease lost or job cancelled; stopping handler")
+					close(lost)
+					cancel()
+					return
+				}
+			}
+		}
+	}()
 	var (
 		res any
 		err error
@@ -290,31 +326,43 @@ func (r *Runner) execute(ctx context.Context, j *Job) {
 				err = Permanent(fmt.Errorf("panic: %v", p))
 			}
 		}()
-		res, err = h(ctx, j)
+		res, err = h(hctx, j)
 	}()
+	cancel()
+	<-hbDone
+	select {
+	case <-lost:
+		jobsProcessed.WithLabelValues(j.Kind, "abandoned").Inc()
+		return
+	default:
+	}
+	fence := func(sql string, args ...any) {
+		tag, uerr := r.DB.Pool.Exec(ctx, sql+` AND locked_by=$`+fmt.Sprint(len(args)+1)+` AND attempts=$`+fmt.Sprint(len(args)+2)+` AND status='processing'`,
+			append(args, r.workerID, j.Attempts)...)
+		if uerr != nil {
+			log.Error("update job outcome", "error", uerr)
+		} else if tag.RowsAffected() == 0 {
+			log.Warn("job outcome discarded: lease lost or job cancelled")
+		}
+	}
 	if err == nil {
 		b, _ := json.Marshal(res)
 		jobsProcessed.WithLabelValues(j.Kind, "succeeded").Inc()
-		_, uerr := r.DB.Pool.Exec(ctx, `UPDATE jobs SET status='succeeded', result=$2, last_error=NULL, locked_until=NULL,
-			updated_at=now(), finished_at=now() WHERE id=$1`, j.ID, b)
-		if uerr != nil {
-			log.Error("mark job succeeded", "error", uerr)
-		}
+		fence(`UPDATE jobs SET status='succeeded', result=$2, last_error=NULL, locked_until=NULL, updated_at=now(), finished_at=now() WHERE id=$1`, j.ID, b)
 		return
 	}
 	var perm permanent
 	if errors.As(err, &perm) || j.Attempts >= j.MaxAttempts {
 		jobsProcessed.WithLabelValues(j.Kind, "quarantined").Inc()
 		log.Error("job quarantined", "error", err)
-		_, _ = r.DB.Pool.Exec(ctx, `UPDATE jobs SET status='quarantined', last_error=$2, locked_until=NULL, updated_at=now(), finished_at=now()
-			WHERE id=$1`, j.ID, truncate(err.Error()))
+		fence(`UPDATE jobs SET status='quarantined', last_error=$2, locked_until=NULL, updated_at=now(), finished_at=now() WHERE id=$1`, j.ID, truncate(err.Error()))
 		return
 	}
 	jobsProcessed.WithLabelValues(j.Kind, "retry").Inc()
 	backoff := time.Duration(1<<min(j.Attempts, 8)) * 2 * time.Second
 	log.Warn("job failed; retrying", "error", err, "backoff", backoff.String())
-	_, _ = r.DB.Pool.Exec(ctx, `UPDATE jobs SET status='queued', last_error=$2, locked_until=NULL, run_at=now()+$3::interval, updated_at=now()
-		WHERE id=$1`, j.ID, truncate(err.Error()), fmt.Sprintf("%d milliseconds", backoff.Milliseconds()))
+	fence(`UPDATE jobs SET status='queued', last_error=$2, locked_until=NULL, run_at=now()+$3::interval, updated_at=now() WHERE id=$1`,
+		j.ID, truncate(err.Error()), fmt.Sprintf("%d milliseconds", backoff.Milliseconds()))
 }
 
 func truncate(s string) string {

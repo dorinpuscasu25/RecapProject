@@ -72,7 +72,7 @@ see `docs/event-processing.md`. Every message has an envelope with `type` (e.g.
 `article.enriched.v1`), so the 17 logical contracts from the brief map onto 9 physical topics plus
 DLQs.
 
-## ADR-006 — Temporal deferred; Postgres-backed durable job runner (accepted, revisit)
+## ADR-006 — Temporal deferred; Postgres-backed durable job runner (accepted; re-evaluated in ADR-020)
 
 **Context.** Temporal is recommended for multi-step workflows (briefings, reprocessing,
 review-dependent flows). Running a Temporal cluster is a significant dependency for a first
@@ -200,3 +200,45 @@ numbers are measurements on small synthetic sets, not accuracy claims.
 `official_api` endpoints, headless rendering and JavaScript-required sources are rejected at
 validation with an explanation instead of being accepted and failing or being silently ignored.
 HTML list pages are supported through link selectors.
+
+## ADR-020 — Temporal re-evaluated: PostgreSQL jobs kept, with leases, heartbeats and fencing (accepted; supersedes the "revisit" of ADR-006)
+
+**Question.** The specification allows Temporal "where justified" for durable workflows. Is it
+needed to meet the durability requirements?
+
+**Workflows in this system and what they need:**
+
+| Workflow | Shape | Needs |
+|---|---|---|
+| Briefing → audio | two independent jobs (`briefing.generate`, `audio.generate`), each idempotent | retries, visibility, explicit `provider_unavailable` |
+| Reindex, vector backfill, reprocess, reclassify | single long job, idempotent upserts | crash recovery, no duplicate concurrent runs, cancellation, progress |
+| Data export / deletion | single job | retries, audit |
+| Fact-check review | human-in-the-loop state machine (`fact_check_reviews`) | durable state, not timers |
+| Digests and notifications | periodic scheduler + per-occurrence dedupe | DST-correct timing, at-most-once per occurrence |
+| Ingestion and enrichment | event-driven consumers over the outbox | at-least-once + idempotency (Kafka/PG bus) |
+
+**What the PostgreSQL job runner provides (verified by `internal/jobs` tests):** durable state in
+the source-of-truth database (enqueued in the same transaction as the business change),
+idempotency keys, priorities, exponential backoff, quarantine after max attempts, leases with
+**heartbeats** (a long job keeps its lease; no duplicate concurrent execution), **crash recovery**
+(an expired lease is reclaimed), **fencing** (a worker that lost its lease cannot overwrite the new
+owner's outcome; its handler is cancelled), **cooperative cancellation** of running jobs, admin
+visibility (`/v1/admin/jobs`, retry, cancel) and metrics.
+
+**What Temporal would add:** deterministic multi-step workflows with event-history replay, durable
+timers and signals, saga-style compensation, workflow versioning and a workflow UI.
+
+**Decision.** None of today's workflows is a long multi-step orchestration with compensation across
+external systems; each is a single idempotent step or a database state machine. Temporal would add
+a stateful cluster (server, its own database, UI) and a second programming model without closing a
+real gap. Kept: PostgreSQL jobs. The gaps that did exist (no heartbeat, no fencing, no cancellation
+of running jobs) were fixed in the runner.
+
+**Revisit when** a workflow needs several external side effects with compensation (e.g.
+distributing to partners and rolling back), long waits with many timers per entity, or
+orchestration across separately deployed services. Job handlers keep a narrow interface
+(`func(ctx, *Job) (any, error)`) so such a workflow can move to Temporal activities without
+touching domain code.
+
+**Known limitation.** Long jobs are not checkpointed: a reclaimed backfill restarts from the
+beginning (safe because writes are idempotent, but repeated work).
