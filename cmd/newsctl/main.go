@@ -39,6 +39,8 @@ const usage = `newsctl — operator CLI
   newsctl create-admin -email A -password P -phone +373… create (or promote) a verified super_admin (fresh installs)
   newsctl ingest-fixtures [-manifest fixtures/sources.json] [-drain=true]
                                                          register the synthetic fixture sources and crawl them
+  newsctl verify-sources -legal-basis "…" [-manifest config/sources/moldova.json] [-max-items 5] [-only name]
+                                                         probe and crawl REAL sources, then report extraction, clustering, fact-checks
   newsctl drain                                          process all pending messages, jobs and mail once (postgres bus)
   newsctl reindex [-types event,article,claim]           rebuild OpenSearch/Qdrant documents from PostgreSQL
   newsctl replay-dead-letter (-id UUID | -all)           requeue dead-lettered messages
@@ -184,6 +186,9 @@ func run(ctx context.Context, cmd string, args []string, log *slog.Logger) (int,
 		}
 		return 0, nil
 
+	case "verify-sources":
+		return verifySources(ctx, args, log)
+
 	case "drain":
 		a, err := open(ctx, log)
 		if err != nil {
@@ -312,12 +317,14 @@ func splitComma(s string) []string {
 	return out
 }
 
+type manifestSource struct {
+	Publisher  sources.PublisherInput  `json:"publisher"`
+	Permission sources.PermissionInput `json:"permission"`
+	Endpoint   sources.EndpointInput   `json:"endpoint"`
+}
+
 type fixtureManifest struct {
-	Sources []struct {
-		Publisher  sources.PublisherInput  `json:"publisher"`
-		Permission sources.PermissionInput `json:"permission"`
-		Endpoint   sources.EndpointInput   `json:"endpoint"`
-	} `json:"sources"`
+	Sources []manifestSource `json:"sources"`
 }
 
 // registerFixtures creates (or reuses) publishers and endpoints from the manifest. Idempotent
@@ -331,8 +338,14 @@ func registerFixtures(ctx context.Context, a *app.App, path string) ([]uuid.UUID
 	if err := json.Unmarshal(raw, &m); err != nil {
 		return nil, err
 	}
+	return registerSources(ctx, a, m.Sources, true)
+}
+
+// registerSources creates or reuses publishers (by domain) and endpoints (by entry URL), applies
+// the permission and, when enable is set, enables the endpoints.
+func registerSources(ctx context.Context, a *app.App, list []manifestSource, enable bool) ([]uuid.UUID, error) {
 	var out []uuid.UUID
-	for _, s := range m.Sources {
+	for _, s := range list {
 		var pubID uuid.UUID
 		err := a.DB.Pool.QueryRow(ctx, `SELECT id FROM publishers WHERE canonical_domain=$1`, *s.Publisher.CanonicalDomain).Scan(&pubID)
 		if db.IsNoRows(err) {
@@ -363,8 +376,10 @@ func registerFixtures(ctx context.Context, a *app.App, path string) ([]uuid.UUID
 		} else if err != nil {
 			return nil, err
 		}
-		if _, err := a.Sources.SetEndpointStatus(ctx, epID, "enabled"); err != nil {
-			return nil, fmt.Errorf("enable %s: %w", *s.Endpoint.Name, err)
+		if enable {
+			if _, err := a.Sources.SetEndpointStatus(ctx, epID, "enabled"); err != nil {
+				return nil, fmt.Errorf("enable %s: %w", *s.Endpoint.Name, err)
+			}
 		}
 		out = append(out, epID)
 	}

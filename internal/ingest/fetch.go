@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/dorinpuscasu25/recapproject/internal/platform/apperr"
 	"github.com/dorinpuscasu25/recapproject/internal/platform/ratelimit"
 	"github.com/dorinpuscasu25/recapproject/internal/platform/ssrf"
@@ -85,7 +87,7 @@ func (f *Fetcher) Fetch(ctx context.Context, ep *sources.Endpoint, rawURL string
 		return nil, err
 	}
 	if ep != nil {
-		if err := f.rateWait(ctx, ep); err != nil {
+		if err := f.rateWait(ctx, ep, u.Hostname()); err != nil {
 			return nil, err
 		}
 	}
@@ -164,10 +166,16 @@ func (e *PermanentHTTPError) Error() string {
 	return fmt.Sprintf("http status %d", e.Status)
 }
 
-func (f *Fetcher) rateWait(ctx context.Context, ep *sources.Endpoint) error {
+func (f *Fetcher) rateWait(ctx context.Context, ep *sources.Endpoint, host string) error {
 	deadline := time.Now().Add(30 * time.Second)
+	// Saved endpoints have their own budget; unsaved ones (source tests) are limited per host,
+	// so tests of different sites do not share one bucket.
+	key := "crawl:" + ep.ID.String()
+	if ep.ID == uuid.Nil {
+		key = "crawl-host:" + strings.ToLower(host)
+	}
 	for {
-		ok, retry, err := f.Limiter.Allow(ctx, "crawl:"+ep.ID.String(), ep.MaxRequestsPerMinute, time.Minute)
+		ok, retry, err := f.Limiter.Allow(ctx, key, ep.MaxRequestsPerMinute, time.Minute)
 		if err != nil || ok {
 			return nil
 		}

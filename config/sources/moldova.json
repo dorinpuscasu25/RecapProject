@@ -1,0 +1,382 @@
+{
+ "description": "REAL Moldovan news sources (Romanian and Russian). Not enabled by default: permissions are 'pending'. `newsctl verify-sources -legal-basis \"…\"` records the operator's stated legal basis as a restricted permission (no raw HTML retention), tests each endpoint, crawls a few items and writes a report. Feed URLs were not reachable from the build environment and may need adjustment.",
+ "sources": [
+  {
+   "publisher": {
+    "name": "IPN",
+    "canonical_domain": "ipn.md",
+    "publisher_type": "newsroom",
+    "primary_languages": [
+     "ro",
+     "ru"
+    ]
+   },
+   "permission": {
+    "legal_basis": "",
+    "permission_status": "pending",
+    "allow_crawl": false
+   },
+   "endpoint": {
+    "name": "IPN RO",
+    "endpoint_type": "rss",
+    "entry_url": "https://www.ipn.md/ro/rss",
+    "fetch_article_pages": true,
+    "languages": [
+     "ro"
+    ],
+    "poll_interval_seconds": 1800,
+    "max_items_per_poll": 20
+   }
+  },
+  {
+   "publisher": {
+    "name": "IPN",
+    "canonical_domain": "ipn.md",
+    "publisher_type": "newsroom",
+    "primary_languages": [
+     "ro",
+     "ru"
+    ]
+   },
+   "permission": {
+    "legal_basis": "",
+    "permission_status": "pending",
+    "allow_crawl": false
+   },
+   "endpoint": {
+    "name": "IPN RU",
+    "endpoint_type": "rss",
+    "entry_url": "https://www.ipn.md/ru/rss",
+    "fetch_article_pages": true,
+    "languages": [
+     "ru"
+    ],
+    "poll_interval_seconds": 1800,
+    "max_items_per_poll": 20
+   }
+  },
+  {
+   "publisher": {
+    "name": "Moldpres",
+    "canonical_domain": "moldpres.md",
+    "publisher_type": "public_institution",
+    "primary_languages": [
+     "ro",
+     "ru"
+    ]
+   },
+   "permission": {
+    "legal_basis": "",
+    "permission_status": "pending",
+    "allow_crawl": false
+   },
+   "endpoint": {
+    "name": "Moldpres RO",
+    "endpoint_type": "rss",
+    "entry_url": "https://www.moldpres.md/ro/rss",
+    "fetch_article_pages": true,
+    "languages": [
+     "ro"
+    ],
+    "poll_interval_seconds": 1800,
+    "max_items_per_poll": 20
+   }
+  },
+  {
+   "publisher": {
+    "name": "Moldpres",
+    "canonical_domain": "moldpres.md",
+    "publisher_type": "public_institution",
+    "primary_languages": [
+     "ro",
+     "ru"
+    ]
+   },
+   "permission": {
+    "legal_basis": "",
+    "permission_status": "pending",
+    "allow_crawl": false
+   },
+   "endpoint": {
+    "name": "Moldpres RU",
+    "endpoint_type": "rss",
+    "entry_url": "https://www.moldpres.md/ru/rss",
+    "fetch_article_pages": true,
+    "languages": [
+     "ru"
+    ],
+    "poll_interval_seconds": 1800,
+    "max_items_per_poll": 20
+   }
+  },
+  {
+   "publisher": {
+    "name": "NewsMaker",
+    "canonical_domain": "newsmaker.md",
+    "publisher_type": "newsroom",
+    "primary_languages": [
+     "ru",
+     "ro"
+    ]
+   },
+   "permission": {
+    "legal_basis": "",
+    "permission_status": "pending",
+    "allow_crawl": false
+   },
+   "endpoint": {
+    "name": "NewsMaker RU",
+    "endpoint_type": "rss",
+    "entry_url": "https://newsmaker.md/feed/",
+    "fetch_article_pages": true,
+    "languages": [
+     "ru"
+    ],
+    "poll_interval_seconds": 1800,
+    "max_items_per_poll": 20
+   }
+  },
+  {
+   "publisher": {
+    "name": "NewsMaker",
+    "canonical_domain": "newsmaker.md",
+    "publisher_type": "newsroom",
+    "primary_languages": [
+     "ru",
+     "ro"
+    ]
+   },
+   "permission": {
+    "legal_basis": "",
+    "permission_status": "pending",
+    "allow_crawl": false
+   },
+   "endpoint": {
+    "name": "NewsMaker RO",
+    "endpoint_type": "rss",
+    "entry_url": "https://newsmaker.md/ro/feed/",
+    "fetch_article_pages": true,
+    "languages": [
+     "ro"
+    ],
+    "poll_interval_seconds": 1800,
+    "max_items_per_poll": 20
+   }
+  },
+  {
+   "publisher": {
+    "name": "Ziarul de Gardă",
+    "canonical_domain": "zdg.md",
+    "publisher_type": "newsroom",
+    "primary_languages": [
+     "ro",
+     "ru"
+    ]
+   },
+   "permission": {
+    "legal_basis": "",
+    "permission_status": "pending",
+    "allow_crawl": false
+   },
+   "endpoint": {
+    "name": "ZdG RO",
+    "endpoint_type": "rss",
+    "entry_url": "https://www.zdg.md/feed/",
+    "fetch_article_pages": true,
+    "languages": [
+     "ro"
+    ],
+    "poll_interval_seconds": 1800,
+    "max_items_per_poll": 20
+   }
+  },
+  {
+   "publisher": {
+    "name": "Ziarul de Gardă",
+    "canonical_domain": "zdg.md",
+    "publisher_type": "newsroom",
+    "primary_languages": [
+     "ro",
+     "ru"
+    ]
+   },
+   "permission": {
+    "legal_basis": "",
+    "permission_status": "pending",
+    "allow_crawl": false
+   },
+   "endpoint": {
+    "name": "ZdG RU",
+    "endpoint_type": "rss",
+    "entry_url": "https://www.zdg.md/ru/feed/",
+    "fetch_article_pages": true,
+    "languages": [
+     "ru"
+    ],
+    "poll_interval_seconds": 1800,
+    "max_items_per_poll": 20
+   }
+  },
+  {
+   "publisher": {
+    "name": "TV8",
+    "canonical_domain": "tv8.md",
+    "publisher_type": "newsroom",
+    "primary_languages": [
+     "ro",
+     "ru"
+    ]
+   },
+   "permission": {
+    "legal_basis": "",
+    "permission_status": "pending",
+    "allow_crawl": false
+   },
+   "endpoint": {
+    "name": "TV8",
+    "endpoint_type": "rss",
+    "entry_url": "https://tv8.md/feed/",
+    "fetch_article_pages": true,
+    "languages": [
+     "ro"
+    ],
+    "poll_interval_seconds": 1800,
+    "max_items_per_poll": 20
+   }
+  },
+  {
+   "publisher": {
+    "name": "Agora",
+    "canonical_domain": "agora.md",
+    "publisher_type": "newsroom",
+    "primary_languages": [
+     "ro"
+    ]
+   },
+   "permission": {
+    "legal_basis": "",
+    "permission_status": "pending",
+    "allow_crawl": false
+   },
+   "endpoint": {
+    "name": "Agora",
+    "endpoint_type": "rss",
+    "entry_url": "https://agora.md/rss",
+    "fetch_article_pages": true,
+    "languages": [
+     "ro"
+    ],
+    "poll_interval_seconds": 1800,
+    "max_items_per_poll": 20
+   }
+  },
+  {
+   "publisher": {
+    "name": "Unimedia",
+    "canonical_domain": "unimedia.info",
+    "publisher_type": "newsroom",
+    "primary_languages": [
+     "ro",
+     "ru"
+    ]
+   },
+   "permission": {
+    "legal_basis": "",
+    "permission_status": "pending",
+    "allow_crawl": false
+   },
+   "endpoint": {
+    "name": "Unimedia RO",
+    "endpoint_type": "rss",
+    "entry_url": "https://unimedia.info/rss/news.xml",
+    "fetch_article_pages": true,
+    "languages": [
+     "ro"
+    ],
+    "poll_interval_seconds": 1800,
+    "max_items_per_poll": 20
+   }
+  },
+  {
+   "publisher": {
+    "name": "Noi.md",
+    "canonical_domain": "noi.md",
+    "publisher_type": "newsroom",
+    "primary_languages": [
+     "ru",
+     "ro"
+    ]
+   },
+   "permission": {
+    "legal_basis": "",
+    "permission_status": "pending",
+    "allow_crawl": false
+   },
+   "endpoint": {
+    "name": "Noi.md RU",
+    "endpoint_type": "rss",
+    "entry_url": "https://noi.md/ru/rss",
+    "fetch_article_pages": true,
+    "languages": [
+     "ru"
+    ],
+    "poll_interval_seconds": 1800,
+    "max_items_per_poll": 20
+   }
+  },
+  {
+   "publisher": {
+    "name": "Guvernul Republicii Moldova",
+    "canonical_domain": "gov.md",
+    "publisher_type": "government",
+    "primary_languages": [
+     "ro",
+     "ru"
+    ]
+   },
+   "permission": {
+    "legal_basis": "",
+    "permission_status": "pending",
+    "allow_crawl": false
+   },
+   "endpoint": {
+    "name": "Gov.md comunicate",
+    "endpoint_type": "html_list",
+    "entry_url": "https://gov.md/ro/comunicate-presa",
+    "fetch_article_pages": true,
+    "languages": [
+     "ro"
+    ],
+    "poll_interval_seconds": 1800,
+    "max_items_per_poll": 20
+   }
+  },
+  {
+   "publisher": {
+    "name": "ANRE",
+    "canonical_domain": "anre.md",
+    "publisher_type": "government",
+    "primary_languages": [
+     "ro",
+     "ru"
+    ]
+   },
+   "permission": {
+    "legal_basis": "",
+    "permission_status": "pending",
+    "allow_crawl": false
+   },
+   "endpoint": {
+    "name": "ANRE noutăți",
+    "endpoint_type": "html_list",
+    "entry_url": "https://anre.md/noutati-3-11",
+    "fetch_article_pages": true,
+    "languages": [
+     "ro"
+    ],
+    "poll_interval_seconds": 1800,
+    "max_items_per_poll": 20
+   }
+  }
+ ]
+}
